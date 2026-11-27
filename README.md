@@ -25,22 +25,53 @@ grist-core از Weblate دارد و ما گسترشش می‌دهیم) — به�
 
 ## نصب از این مخزن
 
+پیش‌نیازها: **Node.js 22** (`.nvmrc` همین را می‌گوید؛ ۲۰ هم می‌شود)، **yarn 1.22** (با
+`corepack enable` درمی‌آید)، **git**، و **python3 + venv** (برای اجرای فرمول‌ها). روی ویندوز همهٔ
+این دستور را در WSL بزنید (اسکریپت‌ها bash هستند).
+
 ```bash
-git clone <آدرسِ این مخزن> grist-core-fa
+# ۱) لایهٔ فارسی (مخزن خصوصی است: با SSH یا با token)
+git clone git@github.com:AliMalakoo/grist-core-fa.git
 cd grist-core-fa
-bin/checkout.sh                  # grist-core را در work/grist-core می‌سازد و لایه را سوار می‌کند
+chmod +x bin/*.sh          # فقط اگر به‌جای clone، ZIP دانلود کرده‌اید (ZIP بیت اجرا نگه نمی‌دارد)
+
+# ۲) grist-core را در نسخهٔ قفل‌شده بگیر و لایه را سوار کن
+./bin/checkout.sh          # -> work/grist-core، خروجی: ۱۹ خط ok
 cd work/grist-core
-yarn install
-yarn run build                   # tsc + webpack + translations
-yarn run dev                     # http://localhost:8484
+
+# ۳) نصب و build (همان چهار خطِ رسمی خودِ grist-core، با yarn)
+yarn run set-community-edition    # وگرنه yarn install افزونه‌های نسخهٔ full را دانلود می‌کند
+yarn run install:python           # sandbox_venv3 برای فرمول‌های پایتون
+yarn run build                    # sanitize_translations + tsc + webpack (چند دقیقه)
+yarn start                        # http://localhost:8484
 ```
 
-نکتهٔ محیطی: `app/common/version.ts` یک فایل تولیدی و gitignored است؛ اگر build از نبود آن شکایت
-کرد بسازیدش:
+`yarn start` حالت watch است (همه‌چیز را دوباره build می‌کند و با Ctrl+C می‌بندید). برای اجرای
+ساده‌ترِ سروری: `yarn run build:prod` بعد `yarn run start:prod`.
 
-```bash
-echo 'export const VERSION: string = "grist-core-fa";' > work/grist-core/app/common/version.ts
-```
+**بار اول:** صفحهٔ «Quick setup» می‌آید و در همان ترمینال یک خط
+`BOOT KEY: <رشته‌ی تصادفی>` چاپ می‌شود — همان کلید را بزنید تا اکانت ادمین ساخته شود. اگر خواستید
+این مرحله رد شود: `GRIST_IN_SERVICE=true yarn start`.
+
+دو نکته که معمولاً گمراه‌کننده‌اند:
+- `app/common/version.ts` را **نسازید**؛ `buildtools/build.sh` خودش آن را از `package.json` و git
+  می‌نویسد (تابع `build_version_file`). فقط وقتی لازم است که مستقیم `tsc` اجرا کنید (مثل step
+  انتخابی `run_build` در workflow).
+- `bin/update.sh` و `bin/checkout.sh` درخت کار را با `git clean -ffd` تمیز می‌کنند؛ اگر داخل
+  `work/grist-core` چیز دستی گذاشته‌اید، قبلش بردارید.
+
+## فعال کردن فارسی و جلالی
+
+سه کلید جدا وجود دارد (هرکدام یک کار متفاوت می‌کند):
+
+| چه | کجا | نتیجه |
+| --- | --- | --- |
+| زبان رابط کاربری | منوی بالا → **Account/Settings → Language → فارسی** (`app/client/ui/AccountPage.ts`) | کل صفحه RTL می‌شود، `<html lang="fa" dir="rtl" data-calendar="jalali">`، و تاریخ‌های رابط جلالی |
+| زبان سند | داخل سند → ⚙️ **Document Settings → «زون محلی / Locale»** را روی فارسی (`fa-IR`) بگذارید | سلول‌های تاریخِ آن سند جلالی نمایش داده می‌شوند و ورودی جلالی را می‌پذیرند (`DocModel.ts:213` → `setJalaliDocLocale`) |
+| فقط یک ستون | روی سرستونِ Date/DateTime → پیکربندی ویجت → تیک **«تقویم هجری شمسی»** | همان ستون جلالی، مستقل از زبان سند (و با برداشتن تیک، صریحاً میلادی می‌ماند) |
+
+اگر «فارسی» در فهرست زبان‌ها نبود، یعنی `write_static_locales.js` اجرا نشده — یک `yarn run build`
+دیگر آن را می‌سازد (فهرست زبان‌ها از `gristConfig.supportedLngs` می‌آید).
 
 ## با یک نسخهٔ جدید از grist-core به‌روز کردن
 
