@@ -1,0 +1,27 @@
+# Run the Persian Grist image built by bin/docker-build.sh.
+#   bin/docker-build.sh          # یک‌بار: merge + docker build
+#   docker compose up -d         # بالا آوردن (و هر بار که --build بدهید، دوباره می‌سازد)
+#   docker compose logs -f grist # لاگ (کلید ورود/"BOOT KEY" بار اول همین‌جا چاپ می‌شود)
+#
+# همهٔ داده‌ها در volume به نام grist-fa-persist می‌ماند؛ حذف کانتینر چیزی را پاک نمی‌کند.
+name: grist-fa
+
+services:
+  grist:
+    image: grist-core-fa:latest
+    build:
+      # بافتِ بیلد، همان درخت grist-core + لایهٔ فارسی است که bin/checkout.sh ساخته.
+      # داکرفایلِ داخلش، داکرفایل رسمی خودِ grist-core است.
+      context: ./work/grist-core
+    restart: unless-stopped
+    ports:
+      - "8484:8484"
+    volumes:
+      - grist-fa-persist:/persist
+    environment:
+      # یک رشتهٔ تصادفی و بلند بگذارید (مثلاً خروجی `openssl rand -base64 24`).
+      # اگر این را عوض کنید، همهٔ نشست‌های باز می‌افتند — پس یک‌بار بگذارید و فراموشش کنید.
+      GRIST_SESSION_SECRET: ${GRIST_SESSION_SECRET:-change-me-please}
+
+volumes:
+  grist-fa-persist: {}

@@ -19,11 +19,36 @@ grist-core از Weblate دارد و ما گسترشش می‌دهیم) — به�
 | `bin/update.sh` | همان کار برای یک تگ جدید + گزارش اینکه upstream چه چیزهایی را عوض کرده |
 | `bin/verify.sh` | بررسی یک‌به‌ید بودن فایل‌ها با overlay |
 | `bin/rerecord.sh` | بعد از ادغام موفق، overlay و patch این مخزن را به‌روز می‌کند |
+| `bin/docker-build.sh` | ایمیج داکر را با **داکرفایل خودِ grist-core** می‌سازد (توصیه‌شده) |
+| `docker-compose.yml` | اجرای ایمیج با volume برای داده؛ `docker compose up -d` |
+| `docs/DOCKER.md` | همهٔ جزئیات داکر: رم، volume، آپدیت، GHCR، محدودیت‌ها |
 | `docs/UPSTREAM.md` | فهرست نقاط اتصال به upstream و نحوهٔ بررسی آن‌ها |
 | `docs/GITHUB-SETUP.md` | ساخت مخزن خصوصی، ریموت‌ها، و آزمون خودکار هفتگی |
 | `.github/workflows/fa-verify.yml` | آزمون خودکار «آیا لایه هنوز روی آخرین upstream می‌نشیند؟» |
+| `.github/workflows/fa-docker.yml` | ایمیج را واقعاً می‌سازد و چک می‌کند لایه داخلش هست و سرور بالا می‌آید |
 
-## نصب از این مخزن
+## نصب با داکر (کم‌دردسرترین راه)
+
+سه خط، همین:
+
+```bash
+git clone https://github.com/AliMalakoo/grist-core-fa.git
+cd grist-core-fa && ./bin/docker-build.sh      # merge + docker build (بار اول ۱۰-۲۰ دقیقه)
+docker compose up -d                           # http://localhost:8484
+```
+
+`bin/docker-build.sh` داکرفایل نمی‌نویسد: درخت merge‌شده را به **داکرفایل رسمی خودِ grist-core**
+می‌دهد، پس پایتون فرمول‌ها، سندباکس، `/persist` و بقیه دقیقاً نسخهٔ بالادستی است و لایهٔ فارسی از
+همان `COPY app` و `COPY assets` وارد می‌شود. بعد از اولین اجرا، کلید ورود در لاگ است:
+
+```bash
+docker compose logs grist | grep -i "boot key"
+```
+
+آپدیت بعدی: `git pull && ./bin/docker-build.sh v1.7.30 && docker compose up -d --build`.
+جزئیات، نیاز رم، پشتیبان‌گیری و انتقال ایمیج به GHCR: `docs/DOCKER.md`.
+
+## نصب از منبع (اگر داکر نمی‌خواهید)
 
 پیش‌نیازها: **Node.js 22** (`.nvmrc` همین را می‌گوید؛ ۲۰ هم می‌شود)، **yarn 1.22** (با
 `corepack enable` درمی‌آید)، **git**، و **python3 + venv** (برای اجرای فرمول‌ها). روی ویندوز همهٔ

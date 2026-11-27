@@ -1,0 +1,88 @@
+name: The docker image actually contains the Persian layer?
+# The expensive one: builds grist-core's own Dockerfile against the merged tree, checks that our
+# layer survived the build, and boots the server. Run it manually, or whenever the docker
+# plumbing changes. Expect 15-25 minutes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: "grist-core ref to build (tag or sha); empty = UPSTREAM.lock"
+        required: false
+        default: ""
+  push:
+    paths:
+      - "bin/docker-build.sh"
+      - "docker-compose.yml"
+      - ".github/workflows/fa-docker.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Merge the Persian layer onto grist-core
+        run: |
+          if [ -n "${{ github.event.inputs.upstream_ref }}" ]; then
+            bin/update.sh "${{ github.event.inputs.upstream_ref }}"
+          else
+            bin/checkout.sh
+          fi
+
+      - name: Validate docker-compose.yml
+        run: docker compose -f docker-compose.yml config -q
+
+      - name: Build the image
+        run: docker build -t grist-fa-ci work/grist-core
+
+      - name: The layer is inside the image
+        run: |
+          cat > /tmp/checks.sh <<'EOS'
+          set -e
+          test -f /grist/_build/app/common/jalali.js && echo "jalali.js compiled      ok"
+          test -f /grist/_build/app/common/LanguageDirection.js && echo "LanguageDirection.js    ok"
+          grep -q 'html\[dir="rtl"\]' /grist/static/bundle.css && echo "rtl rules in bundle.css ok"
+          test -f /grist/assets/locales/fa.client.json && echo "fa catalogue            ok"
+          grep -q jalali /grist/_build/app/common/ValueFormatter.js && echo "ValueFormatter hook     ok"
+          EOS
+          docker run --rm -v /tmp/checks.sh:/checks.sh:ro --entrypoint sh grist-fa-ci /checks.sh
+
+      - name: The conversion works inside the image
+        run: |
+          cat > /tmp/jalali-check.js <<'EOS'
+          const j = require("/grist/_build/app/common/jalali.js");
+          const got = JSON.stringify(j.gregorianToJalali(2026, 11, 27));
+          const want = JSON.stringify({jy: 1405, jm: 9, jd: 6});
+          if (got !== want) { console.error("mismatch: " + got); process.exit(1); }
+          const back = JSON.stringify(j.jalaliToGregorian(1405, 9, 6));
+          const wantBack = JSON.stringify({gy: 2026, gm: 11, gd: 27});
+          if (back !== wantBack) { console.error("mismatch back: " + back); process.exit(1); }
+          console.log("2026-11-27 <-> 1405/09/06 inside the image: ok");
+          EOS
+          docker run --rm -v /tmp/jalali-check.js:/jalali-check.js:ro --entrypoint node grist-fa-ci /jalali-check.js
+
+      - name: The server boots and answers
+        run: |
+          docker run -d --name g -p 8484:8484 \
+            -e GRIST_SESSION_SECRET=ci-only-secret grist-fa-ci
+          ok=""
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8484/ || echo 000)
+            if [ "$code" = "200" ] || [ "$code" = "302" ]; then echo "answered http $code (try $i)"; ok=1; break; fi
+            sleep 5
+          done
+          [ -n "$ok" ] || { docker logs g; exit 1; }
+          echo "--- <html ...> when asked in Persian ---"
+          curl -sL -H 'Accept-Language: fa' http://localhost:8484/ | grep -o '<html[^>]*>' | head -1 || true
+          echo "--- boot log ---"
+          docker logs g 2>&1 | grep -iE "boot key|listen|start" | head -5 || true
+          docker rm -f g
+
+      - name: Drop the image from the runner
+        if: always()
+        run: docker image rm -f grist-fa-ci || true
