@@ -15,5 +15,10 @@ app/common/parseDate.ts
 app/server/lib/sendAppPage.ts
 assets/locales/fa.client.json
 assets/locales/fa.server.json
+static/fonts/vazirmatn/LICENSE
+static/fonts/vazirmatn/vazirmatn-arabic-400-normal.woff2
+static/fonts/vazirmatn/vazirmatn-arabic-700-normal.woff2
+static/fonts/vazirmatn/vazirmatn-latin-400-normal.woff2
+static/fonts/vazirmatn/vazirmatn-latin-700-normal.woff2
 test/common/jalali.ts
 test/server/lib/sendAppPage.ts
