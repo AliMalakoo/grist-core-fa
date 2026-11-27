@@ -927,6 +927,67 @@ index d83abe284..d8466f028 100644
      });
      return timestamp !== null ? timestamp :
        (date && time ? `${date} ${time}` : date || time);
+diff --git a/app/client/widgets/Reference.ts b/app/client/widgets/Reference.ts
+index 2e4b197d0..f7f5e9221 100644
+--- a/app/client/widgets/Reference.ts
++++ b/app/client/widgets/Reference.ts
+@@ -180,9 +180,10 @@ export class Reference extends NTextBox {
+ }
+ 
+ const cssRefIcon = styled(icon, `
+-  float: left;
++  float: inline-start;
+   --icon-color: ${theme.lightText};
+-  margin: -1px 2px 2px 0;
++  margin: -1px 0 2px;
++  margin-inline-end: 2px;
+ 
+   &-view-as-card {
+     cursor: pointer;
+diff --git a/app/client/widgets/ReferenceEditor.ts b/app/client/widgets/ReferenceEditor.ts
+index 508c84caa..6d557f8be 100644
+--- a/app/client/widgets/ReferenceEditor.ts
++++ b/app/client/widgets/ReferenceEditor.ts
+@@ -152,7 +152,7 @@ export function renderACItem(text: string, highlightFunc: HighlightFunc, isAddNe
+ 
+ const cssRefEditor = styled("div", `
+   & > .celleditor_text_editor, & > .celleditor_content_measure {
+-    padding-left: 18px;
++    padding-inline-start: 18px;
+   }
+ `);
+ 
+@@ -225,7 +225,7 @@ const cssRefEditIcon = styled(icon, `
+   background-color: ${theme.lightText};
+   position: absolute;
+   top: 0;
+-  left: 0;
++  inset-inline-start: 0;
+   margin: 3px 3px 0 3px;
+ `);
+ 
+diff --git a/app/client/widgets/ReferenceList.ts b/app/client/widgets/ReferenceList.ts
+index cb0bd6bc9..66381db14 100644
+--- a/app/client/widgets/ReferenceList.ts
++++ b/app/client/widgets/ReferenceList.ts
+@@ -126,7 +126,7 @@ const cssRefIcon = styled(icon, `
+   --icon-color: ${theme.lightText};
+   flex-shrink: 0;
+   position: absolute;
+-  left: 4px;
++  inset-inline-start: 4px;
+ 
+   &-view-as-card {
+     cursor: pointer;
+@@ -138,7 +138,7 @@ const cssRefIcon = styled(icon, `
+ 
+ const cssRefIconAndLabel = styled("div", `
+   position: relative;
+-  padding-left: 20px;
++  padding-inline-start: 20px;
+ `);
+ 
+ const cssLabel = styled("div", `
 diff --git a/app/client/widgets/UserType.ts b/app/client/widgets/UserType.ts
 index 0cc95e429..fc59d0656 100644
 --- a/app/client/widgets/UserType.ts
