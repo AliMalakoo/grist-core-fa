@@ -1,0 +1,17 @@
+# The merged grist-core checkout that bin/checkout.sh builds. Never commit it: it is upstream's
+# code, and the whole point of this repo is to carry only the Persian layer.
+/work/
+
+# Build output from a tree built inside this repo.
+/node_modules/
+/_build/
+/dist/
+/ext/*/node_modules/
+
+# Scratch files the scripts leave behind while merging.
+*.orig
+*.rej
+overlay-conflicts.txt
+overlay-list-conflicts.txt
+.DS_Store
+*.swp
