@@ -119,16 +119,31 @@ hook: سلول `DateTextBox` یک `buildJalaliConfigDom()` با `kf.checkbox(thi
 > upstream `dateOptions` را عوض کرد، `jalaliFormatOptions()` در `jalali.ts` تنها جایی است که
 > مپینگ `monthNames/weekdayNames` را نگه می‌دارد.
 
-## ۸. `app/client/components/CalendarWrapper.ts` — Month/Year view
+## ۸. نمای Calendar — دو موتور پشت `CalendarWidget`
 
-hook: در `getFullOptions()` — `weekStart: "sat"` (MomentJS شمارهٔ روز هفتفه را می‌گیرد) و
-`getTitleLocale()` که برای فارسی `fa` برمی‌گرداند.
+`CalendarView.init()` با `shouldUseJalali()` بین دو موتور انتخاب می‌کند:
 
-> **Rationale:** Intl برای `fa` تقویم جلالی را در Month view هم تحمیل می‌کند؛ اینجا همان locale را
-> نگه می‌داریم و شروع هفته را صحیح می‌کنیم. شمارهٔ روز جلالی در سلول‌ها **نشان داده نمی‌شود** —
-> این یک مرز آگاهانه است، نه فراموشی.
+- **فارسی/جلالی** → `app/client/components/JalaliCalendar.ts`: یک engine سفارشی راست‌به‌چپ
+  (grid خود Grist، بدون Toast UI). نمای ماه یک ماه شمسی واقعی است (۶ ردیفِ شنبه‌اول، شنبه در
+  ستون راست و جمعه آخر ستون چپ)؛ ارقام و نام ماه‌ها فارسی (`آذر ۱۴۰۵`)، نمای هفته ستون‌های
+  شنبه..جمعه با فهرست رویدادها (تمام‌روزه اول)، نمای روز تک‌ستونی. اینترفیس همان
+  `CalendarWidget` است که متغیر CalendarWrapper هم دارد؛ رندرکننده (`CalendarRenderer`) و
+  `CalendarSource` هیچ چیزی از Toast UI نمی‌خواهند.
+- **بقیهٔ زبان‌ها** → `CalendarWrapper.ts` (Toast UI) بدون تغییر در رفتار: شنبه‌اول برای fa/ar
+  از `getLocaleWeekStart()`، نام‌های روز و ارقام محلی در تایتل و هدرها (`_gridTemplates`)، و
+  جهت toolbar در RTL با `margin-inline-start` و جابه‌جایی آیکون‌های prev/next در
+  `CalendarView._buildDom`.
+
+ذخیره‌سازی همچنان Gregorian/unix ثانیه‌ای است؛ تبدیل فقط در لایهٔ نمایش است. موتور جلالی
+drag/resize ندارد؛ ساخت رویداد با دو-کلیک (ماه: تمام‌روزه، غیرماه: ۹ تا ۱۰ صبح) و ویرایش با
+Double-click روی خود رویداد (Record Card).
+
+> **Rationale:** TUI نمی‌تواند ماتریس ماه شمسی را چاپ کند (هفته‌های یک ماه شمسی با هیچ ماه
+> میلادی نمی‌خوانند)، برای همین grid را خودمان کشیدیم؛ اما داده و چرخهٔ نوشتن همان قبلی است.
 >
-> **Check:** `mocha _build/test/client/components/CalendarSection.js`.
+> **Check:** در سند با `lang=fa` یک Calendar باز کنید؛ عنوان «آذر ۱۴۰۵»، شنبه ستون راست، جمعه
+> ستون چپ. `tsc -b app/client` و build باید سبز بماند. تست nbrowser موجود
+> (`test/nbrowser/CalendarView.ts`) فقط مسیر انگلیسی (TUI) را می‌پوشاند.
 
 ## ۹. `assets/locales/fa.{client,server}.json` + تست‌ها — ترجمه
 

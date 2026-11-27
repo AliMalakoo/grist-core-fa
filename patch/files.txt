@@ -26,4 +26,3 @@ test/server/lib/sendAppPage.ts
 app/client/components/JalaliCalendar.ts
 app/client/components/CalendarSource.ts
 app/client/components/CalendarView.ts
-assets/locales/en.client.json

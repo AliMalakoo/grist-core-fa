@@ -30,7 +30,7 @@
 import { CalendarDate } from "app/client/components/CalendarSource";
 import { CalendarHost, CalendarWidget, PERSPECTIVES, Perspective } from "app/client/components/CalendarWrapper";
 import { loadToastUICalendar, ToastUICalendarModule } from "app/client/lib/imports";
-import { detectCurrentLang, makeT } from "app/client/lib/localization";
+import { detectCurrentLang } from "app/client/lib/localization";
 import { reportError } from "app/client/models/errors";
 import { theme } from "app/client/ui2018/cssVars";
 
@@ -43,7 +43,10 @@ import {
 
 import type { EventObject, TZDate } from "@toast-ui/calendar";
 
-const t = makeT("JalaliCalendar");
+// The interface of this widget is Persian by design (it only mounts in Jalali mode), so its
+// strings are Persian literals; the fork does not invent i18n keys (see docs/UPSTREAM.md).
+const NO_EVENTS = "رویدادی نیست";
+const moreLabel = (count: number) => `+${toPersianDigits(String(count))} مورد دیگر`;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CHIP_LIMIT = 3;
@@ -363,7 +366,7 @@ export class JalaliCalendar extends Disposable implements CalendarWidget {
       if (hidden > 0) {
         eventWrap.appendChild(dom(
           "button.jcal_more",
-          dom.text(t("+{{count}} more", { count: hidden })),
+          dom.text(moreLabel(hidden)),
           dom.on("click", (ev) => {
             ev.stopPropagation();
             this._openDayPopover(ev.currentTarget as HTMLElement, cell, events);
@@ -400,13 +403,13 @@ export class JalaliCalendar extends Disposable implements CalendarWidget {
       ));
       const body = dom("div.jcal_colbody");
       if (events.length === 0) {
-        body.appendChild(dom("div.jcal_empty", t("No events")));
+        body.appendChild(dom("div.jcal_empty", NO_EVENTS));
       } else {
         for (const event of events) { body.appendChild(this._agendaRow(event)); }
       }
       const hidden = this._hiddenPerDay.get(cell.key) ?? 0;
       if (hidden > 0) {
-        body.appendChild(dom("div.jcal_hidden_more", t("+{{count}} more", { count: hidden })));
+        body.appendChild(dom("div.jcal_hidden_more", moreLabel(hidden)));
       }
       el.appendChild(body);
       wrap.appendChild(el);

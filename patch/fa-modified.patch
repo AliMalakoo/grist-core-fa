@@ -1141,21 +1141,8 @@ index cd4e91262..e1e120aa5 100644
  interface LogVisitedPageEventOptions {
    server: GristServer;
    pagePath: string;
-diff --git a/assets/locales/en.client.json b/assets/locales/en.client.json
-index 986a19d3a..e9a7a198d 100644
---- a/assets/locales/en.client.json
-+++ b/assets/locales/en.client.json
-@@ -228,7 +228,7 @@
-         "When the event ends. If empty, the event lasts as long as its start.": "When the event ends. If empty, the event lasts as long as its start.",
-         "When the event starts.": "When the event starts.",
-         "Whether the event lasts all day.": "Whether the event lasts all day."
--    },
-+    },"JalaliCalendar":{"+{{count}} more_one":"+{{count}} more","+{{count}} more_other":"+{{count}} more","No events":"No events"},
-     "CellContextMenu": {
-         "Clear cell": "Clear cell",
-         "Clear values": "Clear values",
 diff --git a/assets/locales/fa.client.json b/assets/locales/fa.client.json
-index 058b3425d..ea03a50b1 100644
+index 058b3425d..413d6d84f 100644
 --- a/assets/locales/fa.client.json
 +++ b/assets/locales/fa.client.json
 @@ -1,18 +1,31 @@
@@ -1510,7 +1497,7 @@ index 058b3425d..ea03a50b1 100644
 +    "When the event starts.": "زمان آغاز رویداد.",
 +    "Whether the event lasts all day.": "اینکه رویداد تمام‌روزه باشد یا نه.",
 +    "Type": "نوع"
-+  },"JalaliCalendar":{"+{{count}} more_one":"+{{count}} مورد دیگر","+{{count}} more_other":"+{{count}} مورد دیگر","No events":"رویدادی وجود ندارد"},
++  },
 +  "CardContextMenu": {
 +    "Copy anchor link": "کپی پیوند لنگر",
 +    "Delete card": "حذف کارت",
