@@ -79,17 +79,27 @@ bin/rerecord.sh work/grist-core                        # overlay + patch + UPSTR
 برای نصب معمول (نه update) `bin/checkout.sh <ref>` پیش‌فرض `MODE=clobber` است — همیشه می‌نشیند،
 چون فایل‌های ما را کپی می‌کند. برای دیدنِ درگیری‌ها `MODE=merge bin/checkout.sh <ref>`.
 
-## ساخت مخزن خصوصی روی گیت‌هاب
+## مخزن روی گیت‌هاب (ساخته و push شده)
+
+`https://github.com/AliMalakoo/grist-core-fa` — خصوصی، branch پیش‌فرض `fa`. روی ماشین تازه:
+
+```bash
+git clone git@github.com:AliMalakoo/grist-core-fa.git && cd grist-core-fa
+bin/checkout.sh && cd work/grist-core && yarn install && yarn run build
+```
+
+دستورات ساخت دوباره (اگر روزی مخزن را از نو خواستید بسازید):
 
 ```bash
 # ابزار گیت‌هاب (a): با gh
 gh auth login
-cd /home/user/grist-core-fa
+cd <مسیر این پوشه>
 git init -b fa && git add -A && git commit -m "لایهٔ فارسی grist-core: جلالی، RTL، کاتالوگ fa"
 gh repo create grist-core-fa --private --source . --remote origin --push
 
 # دستی (b): وب
-# 1. New repository → name: grist-core-fa → Private → Create (بدون README)
+# 1. New repository → name: grist-core-fa → Private → Create (بدون README؛ وگرنه تاریخچهٔ ما
+#    روی یک mainِ بی‌ربط می‌نشیند و باید merge یا force کنید)
 # 2. git init -b fa && git add -A && git commit -m "..."
 #    git remote add origin git@github.com:<کاربر>/grist-core-fa.git
 #    git push -u origin fa

@@ -4,10 +4,22 @@
 بدهد، (۲) فقط لایهٔ فارسی را نگه دارد، (۳) با `bin/update.sh` پشت آخرین release خودِ grist-core
 برود بدون اینکه تغییرات بالادستی دور ریخته شوند.
 
-## ۱) ساخت مخزن
+## ۱) وضعیت فعلی
 
-`gh` روی این ماشین نصب نیست (فقط `/usr/bin/git` هست) و هیچ credentialی هم تنظیم نشده؛ پس مخزن را
-یا خودتان بسازید یا یک token بدهید تا من بفرستم.
+مخزن ساخته شده و branch `fa` روی آن push شده است: `github.com/AliMalakoo/grist-core-fa` (خصوصی،
+branch پیش‌فرض `fa`). دسترسی نوشتن از طریق **deploy key** است، نه token: هر ماشین/سندباکسی که باید
+push کند، یک کلید عمومی‌اش را در `Settings → Deploy keys` می‌گذارد (تیک «Allow write access»).
+یک deploy key فقط به همان یک مخزن دسترسی می‌دهد، پس اگر سندباکس عوض شد و کلید خصوصی گم شد، یک
+کلید تازه می‌سازید و همان یک خط را جایگزین می‌کنید.
+
+```bash
+# کلید تازه:
+ssh-keygen -t ed25519 -f /tmp/ghkey/deploy -N "" -C "grist-core-fa-$(hostname)"
+cat /tmp/ghkey/deploy.pub            # این خط را در Deploy keys بگذارید
+# کلید را مخفی نگه دارید: در ~/.ssh بگذارید (chmod 600) و در .git/config هیچ tokenی ننویسید.
+```
+
+دستورات ساخت مخزن از صفر (برای مرجعت کردن به جای دیگر):
 
 **با وب (ساده‌ترین):**
 1. `github.com/new` → Repository name: `grist-core-fa` → **Private** → تیک «Add a README» را
@@ -15,7 +27,7 @@
 2. در این پوشه:
 
 ```bash
-cd /home/user/grist-core-fa
+cd <مسیر این پوشه>
 git init -b fa
 git add -A
 git commit -m "لایهٔ فارسی grist-core: تقویم جلالی، RTL، کاتالوگ fa"
@@ -30,8 +42,10 @@ git push -u origin fa
 
 ```bash
 sudo apt-get install -y gh          # یا: https://cli.github.com
-gh auth login --scopes repo,workflow
-cd /home/user/grist-core-fa
+# `gh auth login` گزینهٔ --scopes ندارد؛ احراز هویت با مرورگر (یا --with-token) خود scopeها را
+# از token می‌گیرد. برای ساخت مخزن + workflow به token با scope `repo` نیاز دارید.
+gh auth login --hostname github.com --git-protocol https --web
+cd <مسیر این پوشه>
 git init -b fa && git add -A && git commit -m "لایهٔ فارسی grist-core"
 gh repo create grist-core-fa --private --source . --remote origin --push
 ```
