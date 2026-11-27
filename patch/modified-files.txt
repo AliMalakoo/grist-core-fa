@@ -1,4 +1,5 @@
 app/client/components/CalendarWrapper.ts
+app/client/components/GridView.ts
 app/client/lib/localization.ts
 app/client/models/DocModel.ts
 app/client/widgets/DateEditor.ts

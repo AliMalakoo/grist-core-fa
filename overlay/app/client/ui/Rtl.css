@@ -97,22 +97,15 @@ html[dir="rtl"] .jjp-toggle-label {
  * ------------------------------------------------------------------------- */
 
 /*
- * GridView positions columns and rows from measured offsets and drives the pane with scrollLeft,
- * so a mirrored scroll pane would place every column wrong. Keep the frames left-to-right; the
- * cells inside them read right-to-left.
+ * GridView lays the grid out from the flow-start edge: with html[dir="rtl"] the scroll pane and
+ * its flex rows run right-to-left, so column A is the first column from the right and the
+ * row-number gutter sticks to the right edge. The JS side normalizes scrollLeft (browsers report
+ * it as a negative number for RTL overflow) and measures positions as distances from the
+ * flow-start edge, so pixels still add up. The overlays that live outside the scroll pane are
+ * pinned to the physical right by the rules below.
  */
-html[dir="rtl"] .grid_view_data,
-html[dir="rtl"] .gridview_data_scroll,
-html[dir="rtl"] .gridview_data_header,
-html[dir="rtl"] .column_names,
-html[dir="rtl"] .gridview_row,
-html[dir="rtl"] .gridview_data_row_num,
-html[dir="rtl"] .gridview_left_border,
-html[dir="rtl"] .frozen_line,
-html[dir="rtl"] .scroll_shadow_left,
-html[dir="rtl"] .scroll_shadow_frozen {
-  direction: ltr;
-  unicode-bidi: isolate;
+html[dir="rtl"] .grid_view_data.gridview_data_scroll {
+  direction: rtl;
 }
 
 /*
@@ -152,7 +145,99 @@ html[dir="rtl"] .g-column-main-menu {
   left: auto;
 }
 
-/* Row numbers and the row menu: .gridview_data_row_num stays LTR above, so its children do. */
+/* The row-number gutter sticks to the right edge, like frozen columns do. */
+html[dir="rtl"] .gridview_data_row_num {
+  right: 0px;
+  left: auto;
+}
+
+/* Frozen columns stack from the right edge. The calc is the same as in GridView.css, which
+ * measures --frozen-position from the flow start (the right edge here). */
+html[dir="rtl"] .record .field.frozen {
+  left: auto;
+  right: calc(var(--row-num-width) + var(--row-num-border) + (var(--frozen-position, 0) - var(--frozen-offset, 0)) * 1px);
+}
+html[dir="rtl"] .field.frozen + .field:not(.frozen) {
+  margin-right: 1px;
+  margin-left: 0;
+}
+
+/* The overlays pinned to the flow-start edge move to the physical right, and the shadows flip
+ * their direction. */
+html[dir="rtl"] .gridview_data_corner_overlay {
+  right: 0;
+  left: auto;
+}
+html[dir="rtl"] .gridview_header_backdrop_left {
+  right: 0;
+  left: auto;
+  border-right: none;
+  border-left: var(--row-num-border) solid var(--grist-theme-table-header-border, lightgray);
+}
+html[dir="rtl"] .gridview_left_border {
+  right: var(--row-num-width);
+  left: auto;
+  border-right: none !important;
+  border-left: var(--row-num-border) solid var(--grist-theme-table-body-border, var(--grist-color-dark-grey)) !important;
+}
+html[dir="rtl"] .frozen_line {
+  right: calc(var(--row-num-width) + var(--frozen-width, 0) * 1px);
+  left: auto;
+}
+html[dir="rtl"] .scroll_shadow_left {
+  right: calc(var(--row-num-width) + (var(--frozen-width, 0) - min(var(--frozen-scroll-offset, 0), var(--frozen-offset, 0))) * 1px);
+  left: auto;
+  box-shadow: 6px 0 6px 6px var(--grist-theme-table-scroll-shadow, #444);
+  -webkit-clip-path: polygon(100% 0, calc(100% - 10px) 0, calc(100% - 10px) 100%, 100% 100%);
+  clip-path: polygon(100% 0, calc(100% - 10px) 0, calc(100% - 10px) 100%, 100% 100%);
+}
+html[dir="rtl"] .scroll_shadow_frozen {
+  right: var(--row-num-width);
+  left: auto;
+  box-shadow: 8px 0 14px 4px var(--grist-theme-table-scroll-shadow, #444);
+  -webkit-clip-path: polygon(100% 0, calc(100% - 10px) 0, calc(100% - 10px) 100%, 100% 100%);
+  clip-path: polygon(100% 0, calc(100% - 10px) 0, calc(100% - 10px) 100%, 100% 100%);
+}
+
+/* Row-number and corner menu toggles belong on the inner (column-facing) edge. */
+html[dir="rtl"] .gridview_data_row_num .menu_toggle {
+  left: 0px;
+  right: auto;
+}
+html[dir="rtl"] .gridview_data_corner_overlay .menu_toggle {
+  left: auto;
+  right: max(4px, calc(var(--row-num-width) - 18px));
+}
+
+/* The invalid-data badge hangs over the first column, like in LTR but on the mirrored side. */
+html[dir="rtl"] .validation_error_number {
+  right: auto;
+  left: -12px;
+}
+
+/* The row's border against the gutter: the gutter moved to the right. */
+html[dir="rtl"] .gridview_data_pane .record {
+  border-left-width: 0;
+  border-right-width: var(--row-num-border);
+}
+html[dir="rtl"] .record {
+  border-left-style: none;
+  border-right-style: solid;
+  border-right-color: var(--grist-theme-table-header-border, lightgray);
+}
+html[dir="rtl"] .column_names.record {
+  border-left-color: inherit;
+  border-right-color: var(--grist-theme-table-header-border, lightgray);
+}
+
+/* The "click to insert column" line sits on the flow-start edge of the column. */
+html[dir="rtl"] .field.field-insert-before::before {
+  left: auto;
+  right: 0;
+}
+
+/* Row numbers and the row menu: the gutter itself is sticky to the right edge; its contents
+ * read right-to-left like everything else. */
 html[dir="rtl"] .gridview_data_row_info {
   direction: rtl;
 }

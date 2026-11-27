@@ -187,6 +187,202 @@ index cf746d44e..9fbb7a127 100644
  // The time format: 24h if the browser locale formats an afternoon time without an am/pm marker,
  // otherwise 12h.
  function getLocaleTimeFormat(): TimeFormat {
+diff --git a/app/client/components/GridView.ts b/app/client/components/GridView.ts
+index a468e9119..de9280053 100644
+--- a/app/client/components/GridView.ts
++++ b/app/client/components/GridView.ts
+@@ -571,7 +571,7 @@ export default class GridView extends BaseView {
+     this.onScroll();
+ 
+     // Initialize scroll position.
+-    this.scrollPane.scrollLeft = this.viewSection.lastScrollPos.scrollLeft;
++    writeScrollLeft(this.scrollPane, this.viewSection.lastScrollPos.scrollLeft);
+     this.scrolly.scrollToSavedPos(this.viewSection.lastScrollPos);
+ 
+     if (this._inline) {
+@@ -1169,11 +1169,11 @@ export default class GridView extends BaseView {
+   }
+ 
+   protected scrollPaneRight() {
+-    this.scrollPane.scrollLeft = this.scrollPane.scrollWidth;
++    writeScrollLeft(this.scrollPane, this.scrollPane.scrollWidth);
+   }
+ 
+   protected scrollPaneLeft() {
+-    this.scrollPane.scrollLeft = 0;
++    writeScrollLeft(this.scrollPane, 0);
+   }
+ 
+   protected selectColumn(colIndex: number) {
+@@ -1309,14 +1309,19 @@ export default class GridView extends BaseView {
+    *        |0____|1____|..5|6__*_|         Returns 6
+    *        |0____|1____|..5|6____| *       Returns 6
+    **/
++  // Convert a mouse event's pageX into "flow" coordinates: a distance from the flow-start edge
++  // of the scroll pane (the left edge in LTR, the right edge in RTL).
++  protected _mouseFlowX(event: MouseEvent): number {
++    const rect = this.scrollPane.getBoundingClientRect();
++    return isRtl() ? rect.right - event.pageX : event.pageX - rect.left;
++  }
++
+   protected getMousePosCol(mouseX: number) {
+     const scrollLeft = this.scrollLeft();
+-    // Offset to left edge of gridView viewports
+-    const headerOffset = this._cornerDom.getBoundingClientRect().right;
+-    // Convert mouse x to grid x (not including scroll yet).
+-    // GridX now has x position as if the grid pane is covering
+-    // the whole screen, it still can be scrolled, so 0px is not equal to A column yet.
+-    const gridX = mouseX - headerOffset;
++    const cornerRect = this._cornerDom.getBoundingClientRect();
++    // Convert the mouse x from page coordinates into "flow" coordinates: a left-to-right
++    // distance from the start of the first data column (which is the right edge for RTL).
++    const gridX = isRtl() ? cornerRect.left - mouseX : mouseX - cornerRect.right;
+     // Total width of frozen columns (if zero, no frozen column set)
+     const frozenWidth = this.frozenWidth.peek();
+     // Frozen columns can be scrolled also, but not more then frozenOffset.
+@@ -1386,7 +1391,7 @@ export default class GridView extends BaseView {
+   // TODO : is this necessary? make passive. Also this could be removed soon I think
+   protected onScroll() {
+     const pane = this.scrollPane;
+-    this.scrollLeft(pane.scrollLeft);
++    this.scrollLeft(readScrollLeft(pane));
+     this.scrollTop(pane.scrollTop);
+     this.width(pane.clientWidth);
+   }
+@@ -1461,12 +1466,12 @@ export default class GridView extends BaseView {
+       this.colLine = dom(
+         "div.col_indicator_line",
+         kd.show(() => this.cellSelector.isCurrentDragType(selector.COL)),
+-        dom.style("left", this.cellSelector.col.linePos),
++        dom.style(flowSide(), this.cellSelector.col.linePos),
+       ),
+       this.colShadow = dom(
+         "div.column_shadow",
+         kd.show(() => this.cellSelector.isCurrentDragType(selector.COL)),
+-        dom.style("left", use => (use(this.dragX) - this.colShadowAdjust) + "px"),
++        dom.style(flowSide(), use => (use(this.dragX) - this.colShadowAdjust) + "px"),
+       ),
+       this.rowLine = dom(
+         "div.row_indicator_line",
+@@ -1487,7 +1492,7 @@ export default class GridView extends BaseView {
+           dom.onDispose(() => {
+           // Save the previous scroll values to the section.
+             this.viewSection.lastScrollPos = _.extend({
+-              scrollLeft: this.scrollPane.scrollLeft,
++              scrollLeft: readScrollLeft(this.scrollPane),
+             }, this.scrolly.getScrollPos());
+           }),
+ 
+@@ -1960,7 +1965,7 @@ export default class GridView extends BaseView {
+   protected colMouseMove(event: MouseEvent) {
+     if (this.gristDoc.docModel.editingFormula.peek()) { return; }
+ 
+-    const currentCol = Math.min(this.getMousePosCol(event.pageX),
++    const currentCol = Math.min(this.getMousePosCol(this._mouseFlowX(event)),
+       this.viewSection.viewFields().peekLength - 1);
+     this.cellSelector.col.end(currentCol);
+   }
+@@ -2070,12 +2075,14 @@ export default class GridView extends BaseView {
+     const colStart = this.cellSelector.colLower();
+     const colEnd = this.cellSelector.colUpper();
+     const shadowWidth = this.colRightOffsets.peek().getCumulativeValueRange(colStart, colEnd + 1);
+-    const shadowLeft = (this._rowNumWidth.peek() + this.colRightOffsets.peek().getSumTo(colStart) - this.scrollLeft());
++    const shadowPos = (this._rowNumWidth.peek() + this.colRightOffsets.peek().getSumTo(colStart) - this.scrollLeft());
++    const flowX = this._mouseFlowX(event);
+ 
+-    this.colLine.style.left = shadowLeft + "px";
+-    this.colShadow.style.left = shadowLeft + "px";
++    setFlowSide(this.colLine, shadowPos);
++    setFlowSide(this.colShadow, shadowPos);
+     this.colShadow.style.width = shadowWidth + "px";
+-    this.colShadowAdjust = event.pageX - shadowLeft;
++    this.colShadowAdjust = flowX - shadowPos;
++    this.dragX(flowX);
+     this.cellSelector.currentDragType(selector.COL);
+     this.cellSelector.col.dropIndex(this.cellSelector.colLower());
+   }
+@@ -2110,7 +2117,7 @@ export default class GridView extends BaseView {
+   }
+ 
+   protected dragCols(event: MouseEvent) {
+-    let dropIndex = Math.min(this.getMousePosCol(event.pageX),
++    let dropIndex = Math.min(this.getMousePosCol(this._mouseFlowX(event)),
+       this.viewSection.viewFields().peekLength - 1);
+     if (this.cellSelector.containsCol(dropIndex)) {
+       dropIndex = this.cellSelector.colLower();
+@@ -2135,7 +2142,7 @@ export default class GridView extends BaseView {
+     }
+     this.cellSelector.col.linePos(linePos + "px");
+     this.cellSelector.col.dropIndex(dropIndex);
+-    this.dragX(event.pageX);
++    this.dragX(this._mouseFlowX(event));
+   }
+ 
+   protected dropRows() {
+@@ -2366,12 +2373,13 @@ export default class GridView extends BaseView {
+ 
+       // Left and right pixel edge of 'viewport', starting from edge of row nums.
+       const frozenWidth = this.frozenWidth.peek();
+-      const leftEdge = this.scrollPane.scrollLeft + frozenWidth;
++      const scrollLeft = readScrollLeft(this.scrollPane);
++      const leftEdge = scrollLeft + frozenWidth;
+       const rightEdge = leftEdge + (viewWidth - frozenWidth);
+ 
+       // If cell doesn't fit onscreen, scroll to fit.
+       const scrollShift = offset - gutil.clamp(offset, leftEdge, rightEdge - fieldWidth);
+-      this.scrollPane.scrollLeft = this.scrollPane.scrollLeft + scrollShift;
++      writeScrollLeft(this.scrollPane, scrollLeft + scrollShift);
+     }
+   }
+ 
+@@ -2608,6 +2616,37 @@ function calcZebra(hex: string) {
+   return `#${convert.hsl.hex(hsl)}`;
+ }
+ 
++// RTL support (see app/client/ui/Rtl.css): in a right-to-left document the grid is laid out
++// flow-from-right -- column A is the first column from the right, the row-number gutter sticks
++// to the right edge, frozen columns stack from the right and horizontal scrolling originates
++// from the right. Browsers report scrollLeft as a negative number for overflow in RTL, so the
++// grid keeps flow-offset values ("how far scrolled from the flow start", always >= 0) in its
++// scrollLeft observable and converts at the DOM boundary with readScrollLeft/writeScrollLeft.
++// Grid x coordinates passed to the mouse helpers are likewise "flow" coordinates: a distance
++// from the flow-start edge (the right edge in RTL).
++function isRtl(): boolean {
++  return typeof document !== "undefined" && document.documentElement.getAttribute("dir") === "rtl";
++}
++function readScrollLeft(pane: HTMLElement): number {
++  const value = pane.scrollLeft;
++  return isRtl() ? Math.abs(value) : value;
++}
++function writeScrollLeft(pane: HTMLElement, value: number) {
++  pane.scrollLeft = isRtl() ? -value : value;
++}
++function flowSide(): "left" | "right" {
++  return isRtl() ? "right" : "left";
++}
++function setFlowSide(elem: HTMLElement, posPx: number) {
++  if (isRtl()) {
++    elem.style.right = posPx + "px";
++    elem.style.left = "";
++  } else {
++    elem.style.left = posPx + "px";
++    elem.style.right = "";
++  }
++}
++
+ // Currently dom.style('--custom-prop', value) from grainjs doesn't work for "custom variable"
+ // properties, so we add a helper to do that. TODO: fix grainjs to support this.
+ function styleCustomVar(property: string, valueObs: BindableValue<string | number>): DomElementMethod {
+@@ -2624,8 +2663,7 @@ function scrollBar(): { width: number; height: number } {
+ 
+ const cssFreeSpace = styled("div", `
+   position: absolute;
+-  left: var(--row-num-width, 0px);
+-  right: 0;
++  ${isRtl() ? "right: var(--row-num-width, 0px);\n  left: 0;" : "left: var(--row-num-width, 0px);\n  right: 0;"}
+   bottom: 0;
+   overflow: hidden;
+   pointer-events: none;
 diff --git a/app/client/lib/localization.ts b/app/client/lib/localization.ts
 index 67800820d..8e0737c7d 100644
 --- a/app/client/lib/localization.ts
