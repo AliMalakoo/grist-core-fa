@@ -1,7 +1,7 @@
 name: The docker image actually contains the Persian layer?
 # The expensive one: builds grist-core's own Dockerfile against the merged tree, checks that our
 # layer survived the build, and boots the server. Run it manually, or whenever the docker
-# plumbing changes. Expect 15-25 minutes.
+# plumbing changes. Expect 15-30 minutes.
 
 on:
   workflow_dispatch:
@@ -22,7 +22,9 @@ permissions:
 jobs:
   image:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
+    env:
+      TREE: work/grist-core
     steps:
       - uses: actions/checkout@v4
 
@@ -33,12 +35,25 @@ jobs:
           else
             bin/checkout.sh
           fi
+          echo "--- what the build context looks like ---"
+          du -sh "$TREE"
+          ls "$TREE" | tr '\n' ' '; echo
 
       - name: Validate docker-compose.yml
         run: docker compose -f docker-compose.yml config -q
 
+      # grist-core's Dockerfile does "COPY --from=ext / /grist/ext" against its "FROM scratch AS ext"
+      # stub, and upstream's own docker.yml always supplies the context: for the open-source image it
+      # runs `mkdir ext && touch ext/dummy` with the comment "grist-oss does not bundle ext/ but the
+      # `ext=ext` build-context requires it". Same here -- a community-edition image, no ext code in git.
+      - name: Prepare the ext build-context
+        run: |
+          mkdir -p "$TREE/ext"
+          [ -n "$(ls -A "$TREE/ext")" ] || touch "$TREE/ext/dummy"
+          ls -A "$TREE/ext"
+
       - name: Build the image
-        run: docker build -t grist-fa-ci work/grist-core
+        run: docker build -t grist-fa-ci --build-context ext="$PWD/$TREE/ext" "$TREE"
 
       - name: The layer is inside the image
         run: |
@@ -66,21 +81,22 @@ jobs:
           EOS
           docker run --rm -v /tmp/jalali-check.js:/jalali-check.js:ro --entrypoint node grist-fa-ci /jalali-check.js
 
+      # Upstream's own test/test_under_docker.sh insists on /status answering "alive" rather than any
+      # answer from /, because the port opens while the server still reports 503 "starting".
       - name: The server boots and answers
         run: |
           docker run -d --name g -p 8484:8484 \
-            -e GRIST_SESSION_SECRET=ci-only-secret grist-fa-ci
+            -e GRIST_SESSION_SECRET=ci-only-secret -e GRIST_BOOT_KEY=ci-boot-key grist-fa-ci
           ok=""
-          for i in $(seq 1 40); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8484/ || echo 000)
-            if [ "$code" = "200" ] || [ "$code" = "302" ]; then echo "answered http $code (try $i)"; ok=1; break; fi
-            sleep 5
+          for i in $(seq 1 60); do
+            if curl -fs http://localhost:8484/status 2>/dev/null | grep -q alive; then
+              echo "status alive after $((i * 3))s"; ok=1; break
+            fi
+            sleep 3
           done
-          [ -n "$ok" ] || { docker logs g; exit 1; }
+          if [ -z "$ok" ]; then echo "--- server log ---"; docker logs g; exit 1; fi
           echo "--- <html ...> when asked in Persian ---"
           curl -sL -H 'Accept-Language: fa' http://localhost:8484/ | grep -o '<html[^>]*>' | head -1 || true
-          echo "--- boot log ---"
-          docker logs g 2>&1 | grep -iE "boot key|listen|start" | head -5 || true
           docker rm -f g
 
       - name: Drop the image from the runner

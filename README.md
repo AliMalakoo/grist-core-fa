@@ -39,13 +39,21 @@ docker compose up -d                           # http://localhost:8484
 
 `bin/docker-build.sh` داکرفایل نمی‌نویسد: درخت merge‌شده را به **داکرفایل رسمی خودِ grist-core**
 می‌دهد، پس پایتون فرمول‌ها، سندباکس، `/persist` و بقیه دقیقاً نسخهٔ بالادستی است و لایهٔ فارسی از
-همان `COPY app` و `COPY assets` وارد می‌شود. بعد از اولین اجرا، کلید ورود در لاگ است:
+همان `COPY app` و `COPY assets` وارد می‌شود. ایمیج نسخهٔ community است (مثل `gristlabs/grist-oss`)؛
+`ext/` توخالی‌ای که اسکریپت می‌سازد همان چیزی است که بالادستی هم در CI خودش می‌سازد — توضیح در
+`docs/DOCKER.md`.
+
+کلید ورود پنل `/admin` بار اول در لاگ چاپ می‌شود (`docker compose logs grist | grep -i "boot key"`)،
+یا خودتان از اول تعیینش کنید:
 
 ```bash
-docker compose logs grist | grep -i "boot key"
+export GRIST_SESSION_SECRET="$(openssl rand -base64 24)"
+export GRIST_BOOT_KEY='یک-رشته-بلند'
+docker compose up -d
 ```
 
-آپدیت بعدی: `git pull && ./bin/docker-build.sh v1.7.30 && docker compose up -d --build`.
+آپدیت بعدی: `git pull && ./bin/docker-build.sh v1.7.30 && docker compose up -d` (بیلد با
+`docker compose build` انجام نمی‌شود؛ `build:` عمدتاً در compose نیست).
 جزئیات، نیاز رم، پشتیبان‌گیری و انتقال ایمیج به GHCR: `docs/DOCKER.md`.
 
 ## نصب از منبع (اگر داکر نمی‌خواهید)

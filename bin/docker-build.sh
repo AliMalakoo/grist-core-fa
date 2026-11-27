@@ -9,8 +9,8 @@
 #   bin/docker-build.sh v1.7.30         # any tag/branch/sha of upstream
 #   IMAGE=myname/grist-fa:1.0 bin/docker-build.sh
 #
-# Needs docker, ~4 GB free RAM for the build (tsc is the memory hog), and a few GB of disk for the
-# docker layer cache. The first build downloads the world; later ones reuse the cache.
+# Needs docker, ~4 GB free RAM for the build (tsc is the memory hog), and a few GB of disk. The
+# first build downloads the world; later ones reuse the docker layer cache.
 set -euo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
@@ -33,7 +33,28 @@ else
 fi
 [ -f "$WORK_DIR/Dockerfile" ] || die "$WORK_DIR has no Dockerfile -- that is the file we build from"
 
-# 2) Say what is going into the image, so the build is not a black box.
+# 2) The `ext` build-context. grist-core's Dockerfile starts with "FROM scratch AS ext" and then
+#    "COPY --from=ext / /grist/ext"; upstream's own .github/workflows/docker.yml always passes
+#    `build-contexts: ext=ext`, and for the open-source image it first does `mkdir ext && touch
+#    ext/dummy`, with the comment "grist-oss does not bundle ext/ but the `ext=ext` build-context
+#    requires it". Copying an empty scratch stage instead is how builds die on the very first COPY,
+#    so do exactly what upstream does. Result: a community-edition image, i.e. gristlabs/grist-oss
+#    equivalent -- which is all grist-core is, and all our Persian layer needs.
+mkdir -p "$WORK_DIR/ext"
+if [ -z "$(ls -A "$WORK_DIR/ext" 2>/dev/null)" ]; then
+  touch "$WORK_DIR/ext/dummy"
+  say "created an empty ext/ (community edition; no full-edition extensions in this image)"
+else
+  say "ext/ already has content -- it will be baked into the image"
+fi
+extra=()
+if docker build --help 2>&1 | grep -q -- '--build-context'; then
+  extra=(--build-context "ext=$WORK_DIR/ext" --progress plain)
+else
+  warn "this docker build has no --build-context (BuildKit is off?); relying on the Dockerfile's stub stage"
+fi
+
+# 3) Say what is going into the image, so the build is not a black box.
 say "the 19 Persian files, as found in the build context:"
 missing=0
 for f in $(list_of "$FILES_LIST"); do
@@ -41,9 +62,9 @@ for f in $(list_of "$FILES_LIST"); do
 done
 [ "$missing" -eq 0 ] || die "$missing of the Persian files are missing from $WORK_DIR -- re-run bin/checkout.sh"
 
-# 3) Build. Both the context and the Dockerfile are the merged grist-core directory.
+# 4) Build. Both the context and the Dockerfile are the merged grist-core directory.
 say "docker build -t $IMAGE  (the slow part: full node build + python sandbox)"
-docker build --progress plain -t "$IMAGE" "$WORK_DIR"
+docker build -t "$IMAGE" ${extra[@]+"${extra[@]}"} "$WORK_DIR"
 
 cat <<EOF
 
@@ -53,11 +74,13 @@ Run it:
     docker run -d --name grist-fa -p 8484:8484 \\
       -v grist-fa-persist:/persist \\
       -e GRIST_SESSION_SECRET="$(head -c 24 /dev/urandom | base64 | tr -d '/+=')" \\
+      -e GRIST_BOOT_KEY="$(head -c 12 /dev/urandom | base64 | tr -d '/+=')" \\
       $IMAGE
     # then open http://localhost:8484  (or use docker compose, see docker-compose.yml)
 
-Your data lives in the named volume grist-fa-persist (documents + /persist/home.sqlite3), so the
-container can be deleted and recreated freely.
+GRIST_BOOT_KEY is the password for the /admin panel; if you leave it out, Grist prints a random one
+into the container log ("BOOT KEY: ..."). Your documents live in the named volume
+grist-fa-persist, so the container can be deleted and recreated freely.
 
-After updating this repo:   git pull && bin/docker-build.sh && docker compose up -d --build
+After updating this repo:   git pull && bin/docker-build.sh && docker compose up -d
 EOF
