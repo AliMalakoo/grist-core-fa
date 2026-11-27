@@ -40,16 +40,28 @@ ensure_clone() {
   local dest="$1" ref="$2"
   if [ -d "$dest/.git" ]; then
     say "updating existing clone at $dest"
-    git -C "$dest" fetch --quiet "$UPSTREAM_URL" "$ref" 2>/dev/null || git -C "$dest" fetch --quiet "$UPSTREAM_URL"
-    git -C "$dest" checkout --quiet --detach "$ref"
-    git -C "$dest" reset --quiet --hard "$ref"
-    git -C "$dest" clean -ffd
+    # --tags: a tag name is a perfectly good thing to ask for, and fetch-by-sha or a
+    # shallow-pruned clone would otherwise leave it unresolvable right after a successful fetch.
+    git -C "$dest" fetch --quiet --tags --force "$UPSTREAM_URL" "$ref" 2>/dev/null \
+      || git -C "$dest" fetch --quiet --tags --force "$UPSTREAM_URL"
   else
     mkdir -p "$(dirname "$dest")"
     say "cloning $UPSTREAM_URL at $ref"
-    git clone --quiet "$UPSTREAM_URL" "$dest"
-    git -C "$dest" checkout --quiet --detach "$ref"
+    git clone --quiet --no-checkout "$UPSTREAM_URL" "$dest"
   fi
+  # Resolve before checking out. Otherwise a ref the clone does not have dies as
+  #   fatal: git checkout: --detach does not take a path argument 'v1.7.22'
+  # which reads like a git bug and points nowhere useful.
+  if ! git -C "$dest" rev-parse --verify -q "${ref}^{commit}" >/dev/null 2>&1; then
+    die "'$ref' is not a commit in $UPSTREAM_URL. Pass a tag, branch or sha that exists there
+    (\`git ls-remote --tags $UPSTREAM_URL | tail -5\` shows the recent ones), or leave the
+    argument empty to use UPSTREAM.lock."
+  fi
+  git -C "$dest" checkout --quiet --detach "$ref"
+  git -C "$dest" reset --quiet --hard "$ref"
+  # NOTE: this wipes untracked files in the tree -- including a node_modules you may have
+  # installed there. Run yarn install only after checkout/update, or point WORK_DIR elsewhere.
+  git -C "$dest" clean -ffd
 }
 
 # Every overlay file must end up byte-identical to what this repo carries, except for the files
