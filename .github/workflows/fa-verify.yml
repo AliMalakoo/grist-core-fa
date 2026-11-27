@@ -2,12 +2,11 @@ name: Persian layer still fits upstream?
 # Runs the merge only -- no yarn install, no build -- so it is cheap. It answers one question:
 # would `bin/update.sh <newest tag>` land cleanly, or does a hook point need attention?
 # Enable `run_build` from the Run workflow form to also typecheck the merged tree.
+#
+# Everything happens under $GITHUB_WORKSPACE/work, which .gitignore already excludes: the runner
+# forbids referencing directories outside the workspace, so no step uses `..` or working-directory.
 
 on:
-  schedule:
-    - cron: "17 3 * * 1"       # Mondays, 03:17 UTC. GitHub disables scheduled workflows on a repo
-                               # with no activity for 60 days -- a push, or touching this file,
-                               # re-enables it.
   workflow_dispatch:
     inputs:
       upstream_ref:
@@ -18,9 +17,20 @@ on:
         description: "Also run yarn install + tsc on the merged tree"
         type: boolean
         default: false
+  # Only when this file changes -- that way touching CI config proves it still works, and a
+  # scheduled run stays cheap the rest of the time. The workflow never pushes, so it cannot loop.
+  push:
+    paths:
+      - ".github/workflows/fa-verify.yml"
+  schedule:
+    # Mondays 03:17 UTC. GitHub switches schedules off on a repo idle for 60 days.
+    - cron: "17 3 * * 1"
 
 permissions:
   contents: read
+
+env:
+  WORK_DIR: ${{ github.workspace }}/work/upstream
 
 jobs:
   merge:
@@ -43,9 +53,7 @@ jobs:
           fi
           echo "ref=$ref" | tee "$GITHUB_OUTPUT"
 
-      - name: Merge the Persian layer onto ${{ steps.ref.outputs.ref }}
-        env:
-          WORK_DIR: ${{ github.workspace }}/../grist-core-merged
+      - name: Merge the Persian layer onto the upstream ref
         run: |
           # update.sh is the one that decides: clobber when upstream stayed out of our files,
           # three-way merge when it did not. It exits 2 when the merge conflicts.
@@ -53,18 +61,28 @@ jobs:
           bin/update.sh "${{ steps.ref.outputs.ref }}" > /tmp/update.log 2>&1
           rc=$?
           set -e
-          { echo "## update.sh (rc=$rc)"; echo '```'; tail -60 /tmp/update.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          { echo "## verify (merge mode)"; echo '```'; bin/verify.sh "$WORK_DIR" merge || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## update.sh (rc=$rc)"
+            echo '```'
+            tail -60 /tmp/update.log
+            echo '```'
+            echo "## verify (merge mode)"
+            echo '```'
+            bin/verify.sh "$WORK_DIR" merge || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           if [ "$rc" -ne 0 ]; then
-            { echo "### conflicts: these files need a human"; \
-              git -C "$WORK_DIR" ls-files -u | awk '{print $4}' | sort -u; } >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "### conflicts: these files need a human"
+              git -C "$WORK_DIR" ls-files -u | awk '{print $4}' | sort -u
+            } >> "$GITHUB_STEP_SUMMARY"
             exit "$rc"
           fi
 
       - name: Typecheck the merged tree
         if: ${{ github.event.inputs.run_build == 'true' }}
-        working-directory: ../grist-core-merged
         run: |
+          cd "$WORK_DIR"
           echo 'export const VERSION: string = "grist-core-fa";' > app/common/version.ts
           npx --yes yarn@1.22.22 install --frozen-lockfile --ignore-scripts --ignore-engines
           # The project has no tsc:prod script; build the app project the way the docs do it.
@@ -72,10 +90,8 @@ jobs:
 
       - name: Report what upstream changed in our files
         if: always()
-        env:
-          WORK_DIR: ${{ github.workspace }}/../grist-core-merged
         run: |
           base="$(sed -n 's/^UPSTREAM_SHA=//p' UPSTREAM.lock)"
           echo "upstream commits touching our files since $base:"
           git -C "$WORK_DIR" log --oneline "$base..${{ steps.ref.outputs.ref }}" -- \
-            $(tr -d '\r' < patch/modified-files.txt | grep -v '^[[:space:]]*$') | head -40
+            $(tr -d '\r' < patch/modified-files.txt | grep -v '^[[:space:]]*$') | head -40 || true
