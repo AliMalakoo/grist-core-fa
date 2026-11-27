@@ -48,9 +48,10 @@
  *
  * Most of the mirroring needs no CSS at all: Grist's chrome is built from flexbox and inline
  * text, and `direction: rtl` reverses both. What this file does is (1) undo the few places that
- * assume left-is-first physically, (2) keep the data grid's geometry intact -- GridView measures
- * and scrolls its columns by hand -- and (3) give Persian and Arabic readers the fonts, cell
- * direction and digit rendering they expect.
+ * assume left-is-first physically, (2) lay out the data grid flow-from-right the way the JS side
+ * is built for (GridView normalizes scrollLeft and measures everything as a distance from the
+ * flow-start edge) and (3) give Persian and Arabic readers the fonts, cell direction and digit
+ * rendering they expect.
  */
 
 /* ------------------------------------------------------------------------- *
@@ -93,7 +94,7 @@ html[dir="rtl"] .jjp-toggle-label {
 }
 
 /* ------------------------------------------------------------------------- *
- * 2. The data grid: content mirrors, geometry does not
+ * 2. The data grid: flow-from-right
  * ------------------------------------------------------------------------- */
 
 /*
