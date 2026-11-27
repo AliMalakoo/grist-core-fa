@@ -1,5 +1,5 @@
 diff --git a/app/client/components/CalendarWrapper.ts b/app/client/components/CalendarWrapper.ts
-index cf746d4..a2ed981 100644
+index cf746d44e..9fbb7a127 100644
 --- a/app/client/components/CalendarWrapper.ts
 +++ b/app/client/components/CalendarWrapper.ts
 @@ -1,6 +1,6 @@
@@ -10,7 +10,31 @@ index cf746d4..a2ed981 100644
  import { theme } from "app/client/ui2018/cssVars";
  import { ColumnsToMap } from "app/plugin/CustomSectionAPI";
  
-@@ -256,7 +256,7 @@ export class CalendarWrapper extends Disposable {
+@@ -93,9 +93,12 @@ export class CalendarWrapper extends Disposable {
+   ) {
+     super();
+     const startDayOfWeek = weekStartToIndex(this._weekStart);
++    // Weekday names for the grid header, in the interface language. TUI otherwise draws
++    // English "Sun..Sat" with Latin digits, even when the title above them is in Persian.
++    const dayNames = getWeekdayNames();
+     this._calendar = new Ctor(this._container, {
+-      week: { taskView: false, startDayOfWeek },
+-      month: { startDayOfWeek },
++      week: { taskView: false, startDayOfWeek, dayNames },
++      month: { startDayOfWeek, dayNames },
+       usageStatistics: false,   // never phone home to Google Analytics
+       defaultView: perspective,
+       isReadOnly: this._host.isReadOnly(),
+@@ -106,7 +109,7 @@ export class CalendarWrapper extends Disposable {
+       // selectDateTime directly (no popup): we add the Grist row for the dragged range and open
+       // Grist's Record Card on it. Double-click an existing event also opens the Record Card.
+       gridSelection: { enableDblClick: true, enableClick: false },
+-      template: this._timeTemplates(),
++      template: this._gridTemplates(),
+       calendars: [{
+         id: CALENDAR_NAME,
+         // Never shown: we use a single calendar, and TUI's popups (which would display this) are
+@@ -256,7 +259,7 @@ export class CalendarWrapper extends Disposable {
      const current = cal.getDate().toDate();
      let title: string;
      if (view === "day") {
@@ -19,7 +43,7 @@ index cf746d4..a2ed981 100644
          weekday: "short", day: "numeric", month: "short", year: "numeric",
        });
      } else if (view === "week") {
-@@ -268,9 +268,10 @@ export class CalendarWrapper extends Disposable {
+@@ -268,9 +271,10 @@ export class CalendarWrapper extends Disposable {
          { day: "numeric" } :
          (sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
        const endFmt: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
@@ -32,7 +56,43 @@ index cf746d4..a2ed981 100644
      }
      this._titleDom.textContent = title;
    }
-@@ -599,7 +600,7 @@ export const cssCalendarContainer = styled("div", `
+@@ -422,10 +426,34 @@ export class CalendarWrapper extends Disposable {
+   // now-indicator default to different styles ("03 pm" vs "15:44"); format both with one helper so
+   // they agree. The drag-selection label can't be templated, so it's hidden via CSS and redrawn as
+   // an overlay in _syncSelectionOverlay to match.
+-  private _timeTemplates(): NonNullable<Options["template"]> {
++  // Hour labels and the day/weekday/month-cell bits of the grid, in the interface language.
++  // TUI's defaults hard-code English weekday names and Latin digits, which shows through in a
++  // Persian calendar next to the Persian title; the classes of the default templates are kept,
++  // so existing CSS and the <<more>> count painting in _paintHiddenCounts keep working.
++  private _gridTemplates(): NonNullable<Options["template"]> {
+     return {
+       timegridDisplayPrimaryTime: ({ time }) => formatHourMinute(time, this._timeFormat),
+       timegridNowIndicatorLabel: ({ time }) => formatHourMinute(time, this._timeFormat),
++      weekDayName: (model) =>
++        `<p><span class="day-name__date">${localizedNumber(model.date)}</span>\u00A0\u00A0` +
++        `<span class="day-name__name">${model.dayName}</span></p>`,
++      monthGridHeader: (model) => {
++        // model.date is "YYYY-MM-DD".
++        const day = parseInt(model.date.split("-")[2], 10);
++        const decorator = model.isToday ? " weekday-grid-date-decorator" : "";
++        return `<span class="weekday-grid-date${decorator}">${localizedNumber(day)}</span>`;
++      },
++      monthMoreTitleDate: (moreTitle) => {
++        const dayIndex = moreTitle.day;
++        const date = typeof moreTitle.date === "number" ?
++          moreTitle.date : parseInt(String(moreTitle.date), 10);
++        const dayName = weekdayNameShort(dayIndex);
++        // Keep the zero padding of TUI's default, in the locale's own zero.
++        const zero = localizedNumber(0);
++        const dateText = localizedNumber(date).padStart(2, zero);
++        return `<p><span class="more-title-date">${dateText}</span>` +
++          `<span class="more-title-day">${dayName}</span></p>`;
++      },
+     };
+   }
+ 
+@@ -599,7 +627,7 @@ export const cssCalendarContainer = styled("div", `
  type CalendarThemeOption = NonNullable<Options["theme"]>;
  
  type TimeFormat = "12h" | "24h";
@@ -41,11 +101,42 @@ index cf746d4..a2ed981 100644
  
  const HOURS_PER_DAY = 24;
  
-@@ -638,18 +639,22 @@ function formatSelectionLabel(text: string, format: TimeFormat): string | null {
+@@ -638,18 +666,53 @@ function formatSelectionLabel(text: string, format: TimeFormat): string | null {
    return null;
  }
  
 -// TUI's startDayOfWeek index: 0=Sun..6=Sat. We only distinguish Sunday/Monday.
++// The short weekday names in the interface language, indexed the way TUI expects them
++// (0=Sunday..6=Saturday). 2023-10-01 was a Sunday. "short" is full-width in Persian, which is
++// what the title uses too.
++function weekdayNameShort(dayIndex: number): string {
++  return weekdayNamesShort()[dayIndex];
++}
++
++const weekdayNamesCache = new Map<string, [string, string, string, string, string, string, string]>();
++
++function weekdayNamesShort(): [string, string, string, string, string, string, string] {
++  const locale = getTitleLocale();
++  let cached = weekdayNamesCache.get(locale);
++  if (!cached) {
++    const fmt = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" });
++    cached = [...Array(7)].map((_, i) =>
++      fmt.format(new Date(Date.UTC(2023, 9, 1 + i)))) as
++      [string, string, string, string, string, string, string];
++    weekdayNamesCache.set(locale, cached);
++  }
++  return cached;
++}
++
++function getWeekdayNames(): [string, string, string, string, string, string, string] {
++  return weekdayNamesShort();
++}
++
++// A number in the interface language, so Persian digits are used where the reader sees Persian.
++function localizedNumber(num: number): string {
++  return new Intl.NumberFormat(getTitleLocale(), { useGrouping: false }).format(num);
++}
++
 +// TUI's startDayOfWeek index: 0=Sun..6=Sat.
  function weekStartToIndex(start: WeekStart): number {
 -  return start === "mon" ? 1 : 0;
@@ -69,7 +160,7 @@ index cf746d4..a2ed981 100644
        return weekInfo.firstDay === 1 ? "mon" : "sun";
      }
    } catch (e) {
-@@ -658,6 +663,26 @@ function getLocaleWeekStart(): WeekStart {
+@@ -658,6 +721,26 @@ function getLocaleWeekStart(): WeekStart {
    return "sun";
  }
  
@@ -97,7 +188,7 @@ index cf746d4..a2ed981 100644
  // otherwise 12h.
  function getLocaleTimeFormat(): TimeFormat {
 diff --git a/app/client/lib/localization.ts b/app/client/lib/localization.ts
-index 6780082..8e0737c 100644
+index 67800820d..8e0737c7d 100644
 --- a/app/client/lib/localization.ts
 +++ b/app/client/lib/localization.ts
 @@ -1,4 +1,6 @@
@@ -152,7 +243,7 @@ index 6780082..8e0737c 100644
    const { userLocale, supportedLngs } = getGristConfig();
    const detected = userLocale ||
 diff --git a/app/client/models/DocModel.ts b/app/client/models/DocModel.ts
-index 3ac935d..bece6a7 100644
+index 3ac935d0d..bece6a72b 100644
 --- a/app/client/models/DocModel.ts
 +++ b/app/client/models/DocModel.ts
 @@ -36,6 +36,7 @@ import { KoSaveableObservable } from "app/client/models/modelUtil";
@@ -178,7 +269,7 @@ index 3ac935d..bece6a7 100644
      this.allTables = this.autoDispose(this._createAllTablesArray());
  
 diff --git a/app/client/widgets/DateEditor.ts b/app/client/widgets/DateEditor.ts
-index 49b75d2..734bf9a 100644
+index 49b75d29f..734bf9a1f 100644
 --- a/app/client/widgets/DateEditor.ts
 +++ b/app/client/widgets/DateEditor.ts
 @@ -1,9 +1,20 @@
@@ -362,7 +453,7 @@ index 49b75d2..734bf9a 100644
  
    // Attach the datepicker.
 diff --git a/app/client/widgets/DateTextBox.js b/app/client/widgets/DateTextBox.js
-index fc7ed42..d13242b 100644
+index fc7ed421c..d13242b64 100644
 --- a/app/client/widgets/DateTextBox.js
 +++ b/app/client/widgets/DateTextBox.js
 @@ -14,6 +14,10 @@ const {cssTextInput} = require("app/client/ui2018/editableLabel");
@@ -445,7 +536,7 @@ index fc7ed42..d13242b 100644
    return dom("div",
      this.buildDateConfigDom(),
 diff --git a/app/client/widgets/DateTimeEditor.ts b/app/client/widgets/DateTimeEditor.ts
-index d83abe2..d8466f0 100644
+index d83abe284..d8466f028 100644
 --- a/app/client/widgets/DateTimeEditor.ts
 +++ b/app/client/widgets/DateTimeEditor.ts
 @@ -95,6 +95,7 @@ export class DateTimeEditor extends DateEditor {
@@ -457,7 +548,7 @@ index d83abe2..d8466f0 100644
      return timestamp !== null ? timestamp :
        (date && time ? `${date} ${time}` : date || time);
 diff --git a/app/client/widgets/UserType.ts b/app/client/widgets/UserType.ts
-index 0cc95e4..fc59d06 100644
+index 0cc95e429..fc59d0656 100644
 --- a/app/client/widgets/UserType.ts
 +++ b/app/client/widgets/UserType.ts
 @@ -165,6 +165,8 @@ export const typeDefs: any = {
@@ -478,7 +569,7 @@ index 0cc95e4..fc59d06 100644
        },
      },
 diff --git a/app/common/ValueFormatter.ts b/app/common/ValueFormatter.ts
-index 05365ad..e4b3db7 100644
+index 05365adf2..e4b3db7ce 100644
 --- a/app/common/ValueFormatter.ts
 +++ b/app/common/ValueFormatter.ts
 @@ -7,6 +7,7 @@ import { getReferencedTableId, isList } from "app/common/gristTypes";
@@ -536,7 +627,7 @@ index 05365ad..e4b3db7 100644
    }
  }
 diff --git a/app/common/WidgetOptions.ts b/app/common/WidgetOptions.ts
-index dc0dc9f..c835909 100644
+index dc0dc9f09..c83590920 100644
 --- a/app/common/WidgetOptions.ts
 +++ b/app/common/WidgetOptions.ts
 @@ -6,6 +6,8 @@ export interface WidgetOptions extends NumberFormatOptions {
@@ -549,7 +640,7 @@ index dc0dc9f..c835909 100644
    choices?: string[];
  }
 diff --git a/app/common/parseDate.ts b/app/common/parseDate.ts
-index 4543c09..d6757a7 100644
+index 4543c09b5..d6757a7af 100644
 --- a/app/common/parseDate.ts
 +++ b/app/common/parseDate.ts
 @@ -1,4 +1,5 @@
@@ -611,7 +702,7 @@ index 4543c09..d6757a7 100644
      const m = moment.tz(cleanDate, format, true, timezone);
      if (m.isValid()) {
 diff --git a/app/server/lib/sendAppPage.ts b/app/server/lib/sendAppPage.ts
-index cd4e912..e1e120a 100644
+index cd4e91262..e1e120aa5 100644
 --- a/app/server/lib/sendAppPage.ts
 +++ b/app/server/lib/sendAppPage.ts
 @@ -16,6 +16,8 @@ import {
@@ -671,7 +762,7 @@ index cd4e912..e1e120a 100644
    server: GristServer;
    pagePath: string;
 diff --git a/assets/locales/fa.client.json b/assets/locales/fa.client.json
-index 058b342..413d6d8 100644
+index 058b3425d..413d6d84f 100644
 --- a/assets/locales/fa.client.json
 +++ b/assets/locales/fa.client.json
 @@ -1,18 +1,31 @@
@@ -2533,7 +2624,7 @@ index 058b342..413d6d8 100644
 +}
 \ No newline at end of file
 diff --git a/assets/locales/fa.server.json b/assets/locales/fa.server.json
-index 0967ef4..59b3595 100644
+index 0967ef424..59b35952b 100644
 --- a/assets/locales/fa.server.json
 +++ b/assets/locales/fa.server.json
 @@ -1 +1,25 @@
@@ -2565,7 +2656,7 @@ index 0967ef4..59b3595 100644
 +}
 \ No newline at end of file
 diff --git a/test/server/lib/sendAppPage.ts b/test/server/lib/sendAppPage.ts
-index 73c827d..107a7d5 100644
+index 73c827d43..107a7d5f8 100644
 --- a/test/server/lib/sendAppPage.ts
 +++ b/test/server/lib/sendAppPage.ts
 @@ -1,9 +1,49 @@
