@@ -8,3 +8,4 @@ static/fonts/vazirmatn/vazirmatn-arabic-700-normal.woff2
 static/fonts/vazirmatn/vazirmatn-latin-400-normal.woff2
 static/fonts/vazirmatn/vazirmatn-latin-700-normal.woff2
 test/common/jalali.ts
+app/client/components/JalaliCalendar.ts

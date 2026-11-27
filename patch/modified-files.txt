@@ -13,3 +13,6 @@ app/server/lib/sendAppPage.ts
 assets/locales/fa.client.json
 assets/locales/fa.server.json
 test/server/lib/sendAppPage.ts
+app/client/components/CalendarSource.ts
+app/client/components/CalendarView.ts
+assets/locales/en.client.json

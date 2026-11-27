@@ -23,3 +23,7 @@ static/fonts/vazirmatn/vazirmatn-latin-400-normal.woff2
 static/fonts/vazirmatn/vazirmatn-latin-700-normal.woff2
 test/common/jalali.ts
 test/server/lib/sendAppPage.ts
+app/client/components/JalaliCalendar.ts
+app/client/components/CalendarSource.ts
+app/client/components/CalendarView.ts
+assets/locales/en.client.json

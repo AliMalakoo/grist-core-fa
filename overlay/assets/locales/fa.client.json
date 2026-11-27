@@ -344,7 +344,7 @@
     "When the event starts.": "زمان آغاز رویداد.",
     "Whether the event lasts all day.": "اینکه رویداد تمام‌روزه باشد یا نه.",
     "Type": "نوع"
-  },
+  },"JalaliCalendar":{"+{{count}} more_one":"+{{count}} مورد دیگر","+{{count}} more_other":"+{{count}} مورد دیگر","No events":"رویدادی وجود ندارد"},
   "CardContextMenu": {
     "Copy anchor link": "کپی پیوند لنگر",
     "Delete card": "حذف کارت",

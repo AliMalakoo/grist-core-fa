@@ -17,6 +17,40 @@ export type Perspective = "day" | "week" | "month";
 export const PERSPECTIVES: Perspective[] = ["day", "week", "month"];
 
 /**
+ * The surface CalendarView and CalendarRenderer talk to. Two engines implement it: CalendarWrapper
+ * (ToastUI, Gregorian) and JalaliCalendar (a custom right-to-left engine, used when the document
+ * or the interface language is Jalali). Anything that drives a calendar should type it against
+ * this, not against an engine.
+ */
+export interface CalendarWidget extends Disposable {
+  // Wraps a date in the engine's date class (TZDate for both engines).
+  tzDate(date: CalendarDate): TZDate;
+  getViewName(): string;
+  // True when the caller should limit how many events it draws per day.
+  capsEventsPerDay(): boolean;
+  // The date the grid is anchored on.
+  getDate(): TZDate;
+  setDate(date: Date | TZDate): void;
+  // The range the grid currently shows, both ends included, in milliseconds.
+  getVisibleRange(): { fromMs: number; toMs: number };
+  render(): void;
+  setTheme(): void;
+  setReadOnly(isReadOnly: boolean): void;
+  updateTitle(): void;
+  changeView(view: Perspective): void;
+  go(method: "prev" | "next" | "today"): void;
+  updateUIAfterNavigation(): void;
+  setAllDayOnly(allDayOnly: boolean): void;
+  createEvents(events: EventObject[]): void;
+  updateEvent(rowId: number, event: EventObject): void;
+  deleteEvent(rowId: number): void;
+  clearEvents(): void;
+  getEvent(rowId: number): EventObject | null | undefined;
+  setSelected(rowId: number | null): void;
+  setHiddenCounts(hiddenPerDay: Map<string, number>): void;
+}
+
+/**
  * What CalendarWrapper asks Grist to do. The calendar knows only row ids and dates. Everything that
  * needs a document (is this editable, where is the cursor, write this row) goes through here.
  * CalendarView implements it.
@@ -49,7 +83,7 @@ export interface CalendarHost extends Disposable {
  * Dropped from the old widget: TUI's form and detail popups with their key handling, the i18next
  * translation code, and a `mouseup` fix for stuck drags that relied on TUI v1 internals.
  */
-export class CalendarWrapper extends Disposable {
+export class CalendarWrapper extends Disposable implements CalendarWidget {
   /**
    * Loads the TUI module (imports.js keeps one copy) and builds the calendar inside `container`.
    * Returns null if the host was disposed while the module was still loading. Named `load` rather

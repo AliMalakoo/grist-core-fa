@@ -1,5 +1,139 @@
+diff --git a/app/client/components/CalendarSource.ts b/app/client/components/CalendarSource.ts
+index b6fcdd5fb..a573a9397 100644
+--- a/app/client/components/CalendarSource.ts
++++ b/app/client/components/CalendarSource.ts
+@@ -1,4 +1,4 @@
+-import { CalendarWrapper } from "app/client/components/CalendarWrapper";
++import { CalendarWidget } from "app/client/components/CalendarWrapper";
+ import { RowList, RowListener, RowSource } from "app/client/models/rowset";
+ import { theme } from "app/client/ui2018/cssVars";
+ import { getReadableColorsCombo } from "app/client/widgets/ChoiceToken";
+@@ -314,7 +314,7 @@ export class CalendarRenderer extends RowListener {
+   private _drawnEventIds = new Set<number>();
+ 
+   constructor(
+-    private _cal: CalendarWrapper,
++    private _cal: CalendarWidget,
+     private _source: CalendarSource,
+     private _visible: RowSource,
+     private _readRecord: ReadRecord,
+diff --git a/app/client/components/CalendarView.ts b/app/client/components/CalendarView.ts
+index e56292787..d1bb8dcf2 100644
+--- a/app/client/components/CalendarView.ts
++++ b/app/client/components/CalendarView.ts
+@@ -4,11 +4,13 @@ import {
+   ReadRecord,
+ } from "app/client/components/CalendarSource";
+ import {
+-  CalendarHost, CalendarWrapper, cssCalendarContainer, getCalendarColumns, Perspective, PERSPECTIVES,
++  CalendarHost, CalendarWidget, CalendarWrapper, cssCalendarContainer, getCalendarColumns,
++  Perspective, PERSPECTIVES,
+ } from "app/client/components/CalendarWrapper";
++import { JalaliCalendar } from "app/client/components/JalaliCalendar";
+ import { GristDoc } from "app/client/components/GristDoc";
+ import { Delay } from "app/client/lib/Delay";
+-import { makeT } from "app/client/lib/localization";
++import { isRtlInterface, makeT } from "app/client/lib/localization";
+ import { ColumnRec, ViewSectionRec } from "app/client/models/DocModel";
+ import { reportError } from "app/client/models/errors";
+ import { urlState } from "app/client/models/gristUrlState";
+@@ -19,6 +21,7 @@ import { icon } from "app/client/ui2018/icons";
+ import { gristThemeObs } from "app/client/ui2018/theme";
+ import { CellValue, UserAction } from "app/common/DocActions";
+ import { isDateOnlyType } from "app/common/gristTypes";
++import { shouldUseJalali } from "app/common/jalali";
+ import { RowFilterFunc } from "app/common/RowFilterFunc";
+ import { WidgetColumnMap } from "app/plugin/CustomSectionAPI";
+ import { UIRowId } from "app/plugin/GristAPI";
+@@ -32,16 +35,16 @@ const t = makeT("CalendarView");
+ const testId = makeTestId("test-calendar-");
+ 
+ /**
+- * CalendarView renders records of the underlying table as events in a Toast UI Calendar, with
+- * day/week/month perspectives.
++ * CalendarView renders records of the underlying table as events, with day/week/month perspectives.
+  *
+  * This is the Grist half: column mapping, reading rows, writing user actions, cursor linking and
+- * the toolbar. The calendar itself lives in CalendarWrapper. The two talk through the CalendarHost
+- * methods on this class: CalendarWrapper reports row ids, and this class turns them into Grist
+- * actions.
++ * the toolbar. The grid itself is one of two engines behind CalendarWidget: CalendarWrapper (the
++ * Toast UI Calendar, Gregorian) or JalaliCalendar (a custom right-to-left Jalali engine), picked
++ * by shouldUseJalali() when the view is created. This class talks to the CalendarHost methods on
++ * the engine: the engine reports row ids, and this class turns them into Grist actions.
+  */
+ export class CalendarView extends BaseView implements CalendarHost {
+-  private _calendar: CalendarWrapper | null = null;
++  private _calendar: CalendarWidget | null = null;
+ 
+   // The date index, rebuilt whenever the mapping or a mapped column's type changes. Held rather
+   // than owned outright, because a rebuild replaces it: creating into a Holder disposes the old one
+@@ -117,14 +120,19 @@ export class CalendarView extends BaseView implements CalendarHost {
+   }
+ 
+   /**
+-   * The async part of the constructor. The Toast UI module is loaded on demand, so the calendar
++   * The async part of the constructor. The calendar module is loaded on demand, so the calendar
+    * cannot exist yet when the constructor returns. The constructor starts this and does not wait
+    * for it; everything that needs a live calendar checks `this._calendar` first.
++   *
++   * When the document or the interface language is Jalali, the custom right-to-left engine is
++   * built instead of Toast UI: TUI's month matrix is Gregorian and cannot be handed a Jalali one,
++   * so the Jalali calendar has its own grid (JalaliCalendar). Both speak CalendarWidget.
+    */
+   public async init() {
+-    const calendar = await CalendarWrapper.load(
+-      this, this._calendarDom, this._titleDom, this._perspective.get());
+-    if (!calendar) { return; }   // the section was disposed while TUI was loading
++    const calendar: CalendarWidget | null = shouldUseJalali()
++      ? await JalaliCalendar.load(this, this._calendarDom, this._titleDom, this._perspective.get())
++      : await CalendarWrapper.load(this, this._calendarDom, this._titleDom, this._perspective.get());
++    if (!calendar) { return; }   // the section was disposed while the calendar module was loading
+     this._calendar = this.autoDispose(calendar);
+ 
+     // disableEditing is a ko.computed that depends on linking state (BaseView.ts), so it can flip
+@@ -381,11 +389,14 @@ export class CalendarView extends BaseView implements CalendarHost {
+   private _buildDom() {
+     this._titleDom = cssCalendarTitle(testId("title"));
+     this._calendarDom = cssCalendarContainer(testId("widget"));
++    // In a right-to-left document, backwards in time reads rightwards: swap the arrows so the
++    // "previous" button points right and "next" points left.
++    const rtl = isRtlInterface();
+     const navGroup = cssNavGroup(
+-      basicButton(icon("ArrowLeft"),
++      basicButton(icon(rtl ? "ArrowRight" : "ArrowLeft"),
+         dom.on("click", () => this._calendar?.go("prev")), testId("prev")),
+       basicButton(t("Today"), dom.on("click", () => this._calendar?.go("today")), testId("today")),
+-      basicButton(icon("ArrowRight"),
++      basicButton(icon(rtl ? "ArrowLeft" : "ArrowRight"),
+         dom.on("click", () => this._calendar?.go("next")), testId("next")),
+     );
+     // Day/Week/Month is a segmented toggle: the standard Grist button group, with the current view
+@@ -464,7 +475,7 @@ interface Field {
+  * so every row costs two number comparisons against the index and navigating re-reads nothing.
+  * Reaching back into the index is safe because CalendarSource updates it before reporting a change.
+  */
+-function inRange(source: CalendarSource, cal: CalendarWrapper): RowFilterFunc<UIRowId> {
++function inRange(source: CalendarSource, cal: CalendarWidget): RowFilterFunc<UIRowId> {
+   const { fromMs, toMs } = cal.getVisibleRange();
+   return rowId => source.isInRange(rowId, fromMs, toMs);
+ }
+@@ -552,11 +563,11 @@ const cssNavGroup = styled("div", `
+ // hovered/primary button is raised (position + z-index) so its border paints on top of neighbors.
+ const cssPerspectiveGroup = styled(cssButtonGroup, `
+   align-items: center;
+-  margin-left: auto;
++  margin-inline-start: auto;
+   flex: none;
+   ${cssToolbarButtons}
+   & > .${cssButton.className}:not(:first-child) {
+-    margin-left: -1px;
++    margin-inline-start: -1px;
+   }
+   & > .${cssButton.className}:hover,
+   & > .${cssButton.className}-primary {
 diff --git a/app/client/components/CalendarWrapper.ts b/app/client/components/CalendarWrapper.ts
-index cf746d44e..9fbb7a127 100644
+index cf746d44e..62108e8c2 100644
 --- a/app/client/components/CalendarWrapper.ts
 +++ b/app/client/components/CalendarWrapper.ts
 @@ -1,6 +1,6 @@
@@ -10,7 +144,57 @@ index cf746d44e..9fbb7a127 100644
  import { theme } from "app/client/ui2018/cssVars";
  import { ColumnsToMap } from "app/plugin/CustomSectionAPI";
  
-@@ -93,9 +93,12 @@ export class CalendarWrapper extends Disposable {
+@@ -16,6 +16,40 @@ const testId = makeTestId("test-calendar-");
+ export type Perspective = "day" | "week" | "month";
+ export const PERSPECTIVES: Perspective[] = ["day", "week", "month"];
+ 
++/**
++ * The surface CalendarView and CalendarRenderer talk to. Two engines implement it: CalendarWrapper
++ * (ToastUI, Gregorian) and JalaliCalendar (a custom right-to-left engine, used when the document
++ * or the interface language is Jalali). Anything that drives a calendar should type it against
++ * this, not against an engine.
++ */
++export interface CalendarWidget extends Disposable {
++  // Wraps a date in the engine's date class (TZDate for both engines).
++  tzDate(date: CalendarDate): TZDate;
++  getViewName(): string;
++  // True when the caller should limit how many events it draws per day.
++  capsEventsPerDay(): boolean;
++  // The date the grid is anchored on.
++  getDate(): TZDate;
++  setDate(date: Date | TZDate): void;
++  // The range the grid currently shows, both ends included, in milliseconds.
++  getVisibleRange(): { fromMs: number; toMs: number };
++  render(): void;
++  setTheme(): void;
++  setReadOnly(isReadOnly: boolean): void;
++  updateTitle(): void;
++  changeView(view: Perspective): void;
++  go(method: "prev" | "next" | "today"): void;
++  updateUIAfterNavigation(): void;
++  setAllDayOnly(allDayOnly: boolean): void;
++  createEvents(events: EventObject[]): void;
++  updateEvent(rowId: number, event: EventObject): void;
++  deleteEvent(rowId: number): void;
++  clearEvents(): void;
++  getEvent(rowId: number): EventObject | null | undefined;
++  setSelected(rowId: number | null): void;
++  setHiddenCounts(hiddenPerDay: Map<string, number>): void;
++}
++
+ /**
+  * What CalendarWrapper asks Grist to do. The calendar knows only row ids and dates. Everything that
+  * needs a document (is this editable, where is the cursor, write this row) goes through here.
+@@ -49,7 +83,7 @@ export interface CalendarHost extends Disposable {
+  * Dropped from the old widget: TUI's form and detail popups with their key handling, the i18next
+  * translation code, and a `mouseup` fix for stuck drags that relied on TUI v1 internals.
+  */
+-export class CalendarWrapper extends Disposable {
++export class CalendarWrapper extends Disposable implements CalendarWidget {
+   /**
+    * Loads the TUI module (imports.js keeps one copy) and builds the calendar inside `container`.
+    * Returns null if the host was disposed while the module was still loading. Named `load` rather
+@@ -93,9 +127,12 @@ export class CalendarWrapper extends Disposable {
    ) {
      super();
      const startDayOfWeek = weekStartToIndex(this._weekStart);
@@ -25,7 +209,7 @@ index cf746d44e..9fbb7a127 100644
        usageStatistics: false,   // never phone home to Google Analytics
        defaultView: perspective,
        isReadOnly: this._host.isReadOnly(),
-@@ -106,7 +109,7 @@ export class CalendarWrapper extends Disposable {
+@@ -106,7 +143,7 @@ export class CalendarWrapper extends Disposable {
        // selectDateTime directly (no popup): we add the Grist row for the dragged range and open
        // Grist's Record Card on it. Double-click an existing event also opens the Record Card.
        gridSelection: { enableDblClick: true, enableClick: false },
@@ -34,7 +218,7 @@ index cf746d44e..9fbb7a127 100644
        calendars: [{
          id: CALENDAR_NAME,
          // Never shown: we use a single calendar, and TUI's popups (which would display this) are
-@@ -256,7 +259,7 @@ export class CalendarWrapper extends Disposable {
+@@ -256,7 +293,7 @@ export class CalendarWrapper extends Disposable {
      const current = cal.getDate().toDate();
      let title: string;
      if (view === "day") {
@@ -43,7 +227,7 @@ index cf746d44e..9fbb7a127 100644
          weekday: "short", day: "numeric", month: "short", year: "numeric",
        });
      } else if (view === "week") {
-@@ -268,9 +271,10 @@ export class CalendarWrapper extends Disposable {
+@@ -268,9 +305,10 @@ export class CalendarWrapper extends Disposable {
          { day: "numeric" } :
          (sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
        const endFmt: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
@@ -56,7 +240,7 @@ index cf746d44e..9fbb7a127 100644
      }
      this._titleDom.textContent = title;
    }
-@@ -422,10 +426,34 @@ export class CalendarWrapper extends Disposable {
+@@ -422,10 +460,34 @@ export class CalendarWrapper extends Disposable {
    // now-indicator default to different styles ("03 pm" vs "15:44"); format both with one helper so
    // they agree. The drag-selection label can't be templated, so it's hidden via CSS and redrawn as
    // an overlay in _syncSelectionOverlay to match.
@@ -92,7 +276,7 @@ index cf746d44e..9fbb7a127 100644
      };
    }
  
-@@ -599,7 +627,7 @@ export const cssCalendarContainer = styled("div", `
+@@ -599,7 +661,7 @@ export const cssCalendarContainer = styled("div", `
  type CalendarThemeOption = NonNullable<Options["theme"]>;
  
  type TimeFormat = "12h" | "24h";
@@ -101,7 +285,7 @@ index cf746d44e..9fbb7a127 100644
  
  const HOURS_PER_DAY = 24;
  
-@@ -638,18 +666,53 @@ function formatSelectionLabel(text: string, format: TimeFormat): string | null {
+@@ -638,18 +700,53 @@ function formatSelectionLabel(text: string, format: TimeFormat): string | null {
    return null;
  }
  
@@ -160,7 +344,7 @@ index cf746d44e..9fbb7a127 100644
        return weekInfo.firstDay === 1 ? "mon" : "sun";
      }
    } catch (e) {
-@@ -658,6 +721,26 @@ function getLocaleWeekStart(): WeekStart {
+@@ -658,6 +755,26 @@ function getLocaleWeekStart(): WeekStart {
    return "sun";
  }
  
@@ -957,8 +1141,21 @@ index cd4e91262..e1e120aa5 100644
  interface LogVisitedPageEventOptions {
    server: GristServer;
    pagePath: string;
+diff --git a/assets/locales/en.client.json b/assets/locales/en.client.json
+index 986a19d3a..e9a7a198d 100644
+--- a/assets/locales/en.client.json
++++ b/assets/locales/en.client.json
+@@ -228,7 +228,7 @@
+         "When the event ends. If empty, the event lasts as long as its start.": "When the event ends. If empty, the event lasts as long as its start.",
+         "When the event starts.": "When the event starts.",
+         "Whether the event lasts all day.": "Whether the event lasts all day."
+-    },
++    },"JalaliCalendar":{"+{{count}} more_one":"+{{count}} more","+{{count}} more_other":"+{{count}} more","No events":"No events"},
+     "CellContextMenu": {
+         "Clear cell": "Clear cell",
+         "Clear values": "Clear values",
 diff --git a/assets/locales/fa.client.json b/assets/locales/fa.client.json
-index 058b3425d..413d6d84f 100644
+index 058b3425d..ea03a50b1 100644
 --- a/assets/locales/fa.client.json
 +++ b/assets/locales/fa.client.json
 @@ -1,18 +1,31 @@
@@ -1313,7 +1510,7 @@ index 058b3425d..413d6d84f 100644
 +    "When the event starts.": "زمان آغاز رویداد.",
 +    "Whether the event lasts all day.": "اینکه رویداد تمام‌روزه باشد یا نه.",
 +    "Type": "نوع"
-+  },
++  },"JalaliCalendar":{"+{{count}} more_one":"+{{count}} مورد دیگر","+{{count}} more_other":"+{{count}} مورد دیگر","No events":"رویدادی وجود ندارد"},
 +  "CardContextMenu": {
 +    "Copy anchor link": "کپی پیوند لنگر",
 +    "Delete card": "حذف کارت",
