@@ -82,6 +82,15 @@ curl -sL -H 'Accept-Language: fa' http://localhost:8484/ | grep -o "<html[^>]*>"
 `assets/locales/fa.client.json`، و اجرای واقعی `gregorianToJalali(2026,11,27)` با کدی که در
 پروداکشن داخل کانتینر اجرا می‌شود.
 
+## قرمز شدن fa-docker یعنی چه
+
+استپ‌های این workflow دو دسته‌اند: «Merge…»، «Prepare the ext build-context»، «Build the image»،
+«The layer is inside the image»، «The conversion works inside the image»، «The server boots and
+answers» — این‌ها **تست**‌اند و اگر قرمز شوند یعنی واقعاً مشکلی هست (اولین شکستِ ۳۵۵۲f7f نبودِ
+`ext` context بود؛ build رد نشد، همان أولین COPY مرده بود). آخرین استپ «Tear down…» با
+`if: always()` و `|| true` است و **هیچ‌وقت** شغل را قرمز نمی‌کند: یک بار `docker rm -f g` در انتهای
+استپ تست، بعد از اینکه همهٔ assertها پاس شده بودند، با کد ۱۲۵ شکست و کل run را قرمز کرد.
+
 ## چیزی که ایمیج حل نمی‌کند
 
 - زبان رابط و «زون محلی» سند را باید خودتان انتخاب کنید (`docs/UPSTREAM.md` و بخش «فعال کردن

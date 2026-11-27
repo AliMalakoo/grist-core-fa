@@ -83,9 +83,12 @@ jobs:
 
       # Upstream's own test/test_under_docker.sh insists on /status answering "alive" rather than any
       # answer from /, because the port opens while the server still reports 503 "starting".
+      # Teardown deliberately lives in the next step: a `docker rm` problem must never be what turns
+      # this check red (that is exactly what exit code 125 was here -- a daemon error from the rm at
+      # the end of this step, after every assertion had already passed).
       - name: The server boots and answers
         run: |
-          docker run -d --name g -p 8484:8484 \
+          docker run -d --name grist-fa-check -p 8484:8484 \
             -e GRIST_SESSION_SECRET=ci-only-secret -e GRIST_BOOT_KEY=ci-boot-key grist-fa-ci
           ok=""
           for i in $(seq 1 60); do
@@ -94,11 +97,16 @@ jobs:
             fi
             sleep 3
           done
-          if [ -z "$ok" ]; then echo "--- server log ---"; docker logs g; exit 1; fi
           echo "--- <html ...> when asked in Persian ---"
           curl -sL -H 'Accept-Language: fa' http://localhost:8484/ | grep -o '<html[^>]*>' | head -1 || true
-          docker rm -f g
+          if [ -z "$ok" ]; then echo "--- server log ---"; docker logs grist-fa-check; exit 1; fi
 
-      - name: Drop the image from the runner
+      - name: Tear down the container and drop the image
         if: always()
-        run: docker image rm -f grist-fa-ci || true
+        run: |
+          # || true everywhere: cleanup is not a test. Removing by id as well, in case a name ever
+          # trips a daemon-side validation rule.
+          docker rm -f grist-fa-check 2>&1 || \
+            docker ps -aq --filter name=grist-fa-check | xargs -r docker rm -f 2>&1 || \
+            echo "nothing to remove"
+          docker image rm -f grist-fa-ci || true
