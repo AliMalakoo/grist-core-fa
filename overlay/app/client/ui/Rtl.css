@@ -243,6 +243,59 @@ html[dir="rtl"] .gridview_data_row_info {
   direction: rtl;
 }
 
+/* The markdown overflow fade mirrors the ellipsis it sits under (which is already moved to the
+ * left edge in section 5): the text fades out towards the reading end. */
+html[dir="rtl"] .field_clip.markdown.overflowing::before {
+  -webkit-mask-image: linear-gradient(to left, transparent calc(100% - 40px), rgb(0, 0, 0) 100%);
+  mask-image: linear-gradient(to left, transparent calc(100% - 40px), rgb(0, 0, 0) 100%);
+}
+
+/* The invalid-data badge hangs over the first column: its padding pushes the digit off the
+ * edge the badge overhangs, so the padding has to flip side with it. */
+html[dir="rtl"] .validation_error_number {
+  padding-right: 0;
+  padding-left: 10px;
+}
+
+/* The "+" add-column header cell ends the table on the flow-end edge, so its separating border
+ * and padding move to the outside edge with it. */
+html[dir="rtl"] .column_name.mod-add-column {
+  border-right-width: 0;
+  border-left-width: 1px;
+  padding-right: 0;
+  padding-left: 12px;
+}
+
+/* The info icon follows the header label in reading direction. */
+html[dir="rtl"] .g-column-label .info_toggle_icon {
+  margin-right: 0;
+  margin-left: 4px;
+}
+
+/* Linked-destination arrow: pinned to the reading edge and pointing into the cell. */
+html[dir="rtl"] .gridview_data_row_info.linked_dst::before {
+  content: "\25C2";
+  text-align: right;
+  left: auto;
+  right: 7px;
+}
+
+/* Print: the repeating table header and the leading border belong on the reading edge. */
+@media print {
+  html[dir="rtl"] .print-widget .gridview_stick-top {
+    border-left: none;
+    border-right: 1px solid var(--grist-color-dark-grey);
+  }
+  html[dir="rtl"] .print-widget .gridview_data_header {
+    padding-left: 0 !important;
+    padding-right: var(--row-num-width) !important;
+  }
+  html[dir="rtl"] .print-widget .gridview_data_pane .print-all-rows {
+    border-left: none;
+    border-right: 1px solid var(--grist-color-dark-grey);
+  }
+}
+
 /* ------------------------------------------------------------------------- *
  * 3. Cell editors
  * ------------------------------------------------------------------------- */
@@ -405,9 +458,11 @@ html[dir="rtl"] .field_clip.markdown.overflowing::after {
 
 /*
  * Menus, popovers and tooltips. Their own classes are generated at build time (grainjs `styled`),
- * so there is nothing stable to select on beyond the plain element names Grist keeps on the
- * containers -- which is exactly what we need: text direction, not layout. Popper positions them
- * and follows `dir` on its own.
+ * so there is nothing stable to select on beyond the plain classes Grist keeps on the containers
+ * (grist-floating-menu) and the attribute popper v1 stamps on the positioned element (x-placement)
+ * -- which is exactly what we need: text direction, not layout. The popper anchor itself is
+ * mirrored in code (see app/client/lib/rtlPlacement.ts); menus opened from an RTL trigger drop
+ * from its reading edge.
  */
 html[dir="rtl"] .menu-list,
 html[dir="rtl"] .menu-header,
@@ -416,11 +471,13 @@ html[dir="rtl"] .popup-backdrop,
 html[dir="rtl"] .g-table-header,
 html[dir="rtl"] .g-tooltip,
 html[dir="rtl"] .grain-popmenu,
-html[dir="rtl"] [data-popper-placement] {
+html[dir="rtl"] .grist-floating-menu,
+html[dir="rtl"] [x-placement] {
   text-align: right;
 }
 html[dir="rtl"] .menu-list > *,
-html[dir="rtl"] .popup-inner-box > * {
+html[dir="rtl"] .popup-inner-box > *,
+html[dir="rtl"] .grist-floating-menu {
   direction: rtl;
 }
 

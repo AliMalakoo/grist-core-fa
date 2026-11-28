@@ -1,21 +1,14 @@
 # نقاط اتصال لایهٔ فارسی به grist-core
 
 هر فایل این مخزن یا **جدید** است (به‌تنهایی اضافه می‌شود، هیچ رفتار upstream را عوض نمی‌کند) یا روی
-فایل موجود upstream یک **hook** کوچک دارد. پنج فایل، کامل جدیدند:
-
-```
-app/common/jalali.ts              app/common/LanguageDirection.ts
-app/client/ui/JalaliDatePicker.ts app/client/ui/Rtl.css
-test/common/jalali.ts
-```
-
-بقیه (۱۴ فایل) دست‌خورده‌اند و hookهایشان در زیر آمده — این تنها چیزی است که باید بعد از هر
-update بازبینی شود. برای پیداکردن هر hook در نسخهٔ جدید به نام نماد grep کنید نه شمارهٔ خط:
+فایل موجود upstream یک **hook** کوچک دارد. فهرست دقیق فایل‌ها در `patch/files.txt` است
+(`added-files.txt` برای فایل‌های نو و `modified-files.txt` برای فایل‌های upstreamیِ دست‌خورده)؛
+برای پیداکردن هر hook در نسخهٔ جدید به نام نماد grep کنید نه شمارهٔ خط:
 
 ```bash
 cd work/grist-core
-grep -rn "jalali\|Jalali\|languageDir\|grist-rtl" app/common/ValueFormatter.ts app/client/models/DocModel.ts \
-  app/client/lib/localization.ts app/server/lib/sendAppPage.ts app/common/parseDate.ts
+grep -rn "jalali\|Jalali\|languageDir\|grist-rtl\|rtlPlacement" app/common/ValueFormatter.ts app/client/models/DocModel.ts \
+  app/client/lib/localization.ts app/server/lib/sendAppPage.ts app/common/parseDate.ts app/client/ui2018/menus.ts
 ```
 
 ## ۱. `app/common/ValueFormatter.ts` — نمایش
@@ -159,6 +152,86 @@ Double-click روی خود رویداد (Record Card).
 > به `en.client.json` اضافه کرد، `fa.client.json` باید همان کلید را (ترجمه‌نشده) بگیرد — اسنیپت
 > پایین همین صفحه آن را می‌شمارد. `test/server/lib/sendAppPage.ts` هم افزوده شده تا
 > `lang`/`dir`/`data-calendar` سمت سرور بدون مرورگر آزمایش شود.
+
+## ۱۰. منوها و پاپ‌آپ‌های شناور در RTL + حدس نوع ستون با ارقام فارسی
+
+- `app/client/lib/rtlPlacement.ts` (جدید): popper v1 به `start/end` و `left/right` می‌چسبد و
+  جهت را نمی‌فهمد؛ `rtlPlacement()` آن‌ها را آینه می‌کند (`bottom-start` → `bottom-end`)، و
+  `rtlSetPopupToCreateDom`/`rtlSetPopupToFunc` همان آینه را یک‌بار روی گزینه‌ها اعمال می‌کنند.
+- `app/client/ui2018/menus.ts`: `menu()`،`submenu` (از راست به چپ باز می‌شود)،`inputMenu` و
+  `select()` همین آینه را یک‌بار می‌کنند؛ و `defaultMenuOptions` خود popweasel در اول ماژول
+  یک‌بار آینه می‌شود تا select/autocompleteهایی که placement صریح نمی‌گیرند هم از راست باز شوند
+  (با guard تا دوبار آینه نشود). استایل‌های منو به `inset-inline-*` تبدیل شد.
+- بقیهٔ call siteها (`PageWidgetPicker`, `RenameDocModal`, `NotifyUI`, `TriggerFormulas`,
+  `ColorSelect`, `ColumnTitle`, `searchDropdown`, `GridView`, `FormView`, `OnBoardingPopups`,
+  `autocomplete`, `tooltips`) هم به همین مسیرهای یک‌بار-آینه منتقل شدند؛ `tooltips.ts` نمونه‌ای
+  بود که دوبار آینه می‌شد و اصلاح شد.
+- `app/common/ValueGuesser.ts`: در سند با locale فارسی، حدس «تاریخ/زمان» اول جلالی را می‌فهمد
+  (`guessJalaliDateFormat` با اولویت قالب day-first/year-first؛ ارقام فارسی و bidi-mark قبل از
+  حدس با momentify نرمال می‌شوند)، تست برابریِ formatter هم با ارقام لاتین مقایسه می‌کند.
+  اعداد فارسی (`۱۲۳۴٫۵`) هم دیگر به‌خاطر نگاشت اصلاحی زودهنگام رد نمی‌شوند.
+- `app/common/jalali.ts`: باگ «جداکنندهٔ بین تاریخ و زمان» در `formatJalaliMoment` رفع شد
+  (مثلاً `۱۴۰۵/۰۹/۰۶ ۱۴:۳۰` قبلاً `۱۴۰۵/۰۹/۰۶۱۴:۳۰` رندر می‌شد)؛ تست‌ها در `test/common/jalali.ts`.
+- `app/client/lib/koDomScrolly.js` (اصلاحِ فایل بالادستی): گزینهٔ `paddingLeft` به پهنه‌ٔ
+  اسکرول افزوده شد؛ `GridView.ts` در چیدمان RTL این padding را به‌جای سمت راست به سمت چپ می‌دهد
+  تا ستون آخر به لبهٔ جریان (`--gridview-header-height` انتهایی) برسد.
+- کلیدهای جهت‌نما در RTL بومی‌سازی شدند (پیمایش با جهت دیداریِ صفحه):
+  `Cursor.ts` (`cursorLeft`/`cursorRight` بر پایهٔ `hArrowSign()`)، overrideهای مشابه در
+  `GridView.ts` (به‌همراه `scrollPaneLeft/Right` در لبهٔ جریان)، `_shiftSelect` و
+  `_shiftSelectUntilFirstOrLastNonEmptyCell` (جهت `left`/`right` جابه‌جا می‌شود)،
+  `Forms/FormView.ts` (`cursorLeft`/`cursorRight` به `nextField`/`prevField` نگاشت می‌شوند)،
+  `ariaTabs.ts` (چرخهٔ تب‌ها)، `OnBoardingPopups.ts` (قدم‌های پرسش‌نما)، `TokenField.ts`
+  (bindings پیش/پس)، `AttachmentsEditor.ts` (افقی)، `DetailView.ts` (آیکون‌های دکمهٔ قبل/بعد).
+  کلیدهای Tab/Shift+Tab و Home/End (ترتیب خواندن) و کلیدهای عمودی تغییر نکردند.
+- `Rtl.css`: آینه‌سازی ماسکِ ellipsis در markdown، فاصله‌گذاریِ شماره‌ٔ اعتبارسنجی و
+  `mod-add-column`، حاشیهٔ `info_toggle_icon`، جهتِ `linked_dst::before` (◀) و یک بلوک
+  `@media print` برای `.print-widget` (حاشیه و padding ردیف‌شمارها در چاپ RTL).
+- **وضعیت:** کامپایل (`tsc --noEmit`)، bundle توسعه‌ای و `test:common` سبز (۸۷۶ پاس)؛
+  round-trip تازه→overlay→مقایسهٔ بایت به‌بایت تمیز است. اما **در مرورگر کلیک نشده** —
+  منوها/پاپ‌آپ‌ها، گرید RTL و کلیدهای جدید باید دستی بررسی شوند. کلیدهای جهت‌نمای popweasel
+  در زیر-منو عمداً هاردکد باقی ماندند (ArrowRight باز می‌کند / ArrowLeft می‌بندد)؛ در RTL
+  بومی‌سازی نشدند چون grainjs به listenerهای هم‌عنصر `stopPropagation` نمی‌زند و مرتب‌سازی
+  قابل‌اعتماد نیست؛ تا کردن صحیح آن به‌جای آینهٔ کامل، کلیدهای همانند LTR را نگه می‌دارد.
+
+## ۱۱. فرمول‌ها و مقایسهٔ فیلدهای تاریخ جلالی (`sandbox/grist`)
+
+فیلدهای Date/DateTime جلالی همان ستون‌های تاریخ معمولیِ Grist هستند و مقدارشان میلادیِ
+(ثانیه‌های یونیکس) ذخیره می‌شود؛ جلالی فقط یک لایهٔ نمایش است. بنابراین **بین فیلدها** همه‌چیز
+بدون هیچ تغییر دیگری کار می‌کند — ترتیبِ دو تاریخ در تقویم شمسی دقیقاً با ترتیب میلادی یکی است:
+
+- `$A < $B`، `$A > TODAY()`، `DATEDIF($A, $B, "D")`، تفریق تاریخ‌ها؛ DATEDIF و سایر توابع
+  تاریخِ Python روی اشیای `date`/`datetime` اجرا می‌شوند؛ خطای «unorderable types» فقط برای
+  مقایسهٔ Date با Text رخ می‌دهد (رفتار upstream).
+- نتیجهٔ فرمولی که تاریخ برمی‌گرداند در ستونی با ویدجت جلالی، جلالی نمایش داده می‌شود.
+- منوی «Date helpers» (گروه DateAndTime در `GridViewMenusDateHelpers.ts`) همان DATEDIF را
+  می‌سازد و روی فیلدهای جلالی هم درست است.
+
+آنچه **کار نمی‌کرد** (و با این لایه اصلاح شد): لیترال‌های تاریخ داخلِ فرمول. مثلاً
+`DATEDIF("۱۴۰۳/۰۱/۰۱", TODAY(), "D")` قبلاً `۱۴۰۳` را به‌عنوان *سال میلادی ۱۴۰۳* می‌خواند
+(بی‌صدا، بدون خطا) یا با ارقام فارسی خطای parse می‌داد. حالا:
+
+- `sandbox/grist/jalali.py` (جدید): همتای Pythonِ `app/common/jalali.ts` — همان الگوریتم
+  ۳۳‌ساله (BREAKS) و همان قانون locale (`JALALI_LANGS`)، همان پنجرهٔ plausibility (۱۲۰۰–۱۵۰۰)
+  و همان تعویض خودکار ماه/روز. تست تفاضلی با TS روی ~۲۲٬۰۰۰ روز نمونه و round-trip کامل، صفر
+  مغایرت. `parse_jalali_string` همان شکل‌های ورودی (ارقام فارسی/عربی/fullwidth، اسامی ماه شمسی
+  فارسی/انگلیسیِ کوتاه و کامل با نرمال‌سازی الف/ی/ک/ة، جداکننده‌های bidi، پسوند جلالی، زمان
+  انتهایی، و نهایتاً null برای تاریخ‌های میلادیِ سال >۱۵۰۰) را می‌پذیرد.
+- `sandbox/grist/functions/date.py` (تغییر): `_make_datetime`/`_make_date`/`DATEVALUE` قبل از
+  dateutil، اگر سند روی تقویم شمسی باشد (`documentSettings.locale` فارسی/دری/… — همان چیزی که
+  کلاینت می‌خواند)، رشته را Jalali می‌خوانند؛ در سند انگلیسی/میلادی رفتار بی‌تغییر می‌ماند.
+  ارقام فارسی هم به‌صورت طبیعی (چون Python و dateutil با \d یونیکد کار می‌کنند) parse می‌شدند —
+  مشکل فقط تقویم بود، که حل شد.
+- عمداً **تغییر نکرد**: آرگومان‌های عددی `DATE()`, `EDATE()`, `EOMONTH()` و … میلادی می‌مانند
+  (تغییر معنای آن‌ها، نتایجِ موجودِ سندهای فارسی را بی‌صدا جابه‌جا می‌کرد). برای لیترال شمسی
+  داخل فرمول بنویسید `DATEVALUE("۱۴۰۳/۰۵/۱۲")` یا به ستون اشاره کنید، نه `DATE(1403, 5, 12)`.
+- تست‌ها: `sandbox/grist/functions/test_jalali_date.py` (۱۶ تست؛ تبدیل، parse، لیترال در
+  فرمول با monkeypatchِ `doc_uses_jalali`، و یک تست engine-level روی ستون‌های Date فرمولی).
+  سوئیت کامل `python sandbox/grist/runtests.py` = ۷۴۶ تست سبز (۲ skipped از قبل).
+
+**محدودیت باقی‌مانده:** `_get_global_tz`/`doc_uses_jalali` در زمان اجرا از DocInfo خوانده می‌شوند؛
+اگر locale سند در وسط جلسه تغییر کند، فرمول‌های در حال اجرا تا re-eval شدنِ DocInfo همان تقویم
+قبلی را می‌بینند (همان رفتار timezone در upstream). و import/paste هنوز از همان محدودیت
+مستند (`parseDateStrict` پرچم per-column جلالی را نمی‌گیرد) تبعیت می‌کنند.
 
 ## قبل از هر انتشار، این فهرست را ببینید
 

@@ -59,6 +59,8 @@ import { Sort } from "app/common/SortSpec";
 import { CombinedStyle } from "app/common/Styles";
 import { CursorPos, UIRowId } from "app/plugin/GristAPI";
 
+import { rtlSetPopupToCreateDom } from "app/client/lib/rtlPlacement";
+
 import convert from "color-convert";
 import {
   BindableValue,
@@ -79,7 +81,7 @@ import {
 import ko from "knockout";
 import debounce from "lodash/debounce";
 import identity from "lodash/identity";
-import { IOpenController, PopupControl, setPopupToCreateDom } from "popweasel";
+import { IOpenController, PopupControl } from "popweasel";
 import _ from "underscore";
 
 // Disable member-ordering linting temporarily, so that it's easier to review the conversion to
@@ -512,6 +514,15 @@ export default class GridView extends BaseView {
       this.cursor.rowIndex(this.cursor.rowIndex()! - 1);
     },
     cursorRight: function() {
+      if (isRtl()) {
+        // In the RTL layout the fields grow to the left, so the Right arrow walks the index
+        // down, and the edge to reveal at the flow start is the left one.
+        if (this.cursor.fieldIndex() === 0) {
+          this.scrollPaneLeft();
+        }
+        this.cursor.fieldIndex(this.cursor.fieldIndex() - 1);
+        return;
+      }
       if (this.cursor.fieldIndex() === this.viewSection.viewFields().peekLength - 1) {
         // When the cursor is in the rightmost column, the view may not be scrolled all the way to
         // the right (i.e. in the case of a wide column).
@@ -520,6 +531,15 @@ export default class GridView extends BaseView {
       this.cursor.fieldIndex(this.cursor.fieldIndex() + 1);
     },
     cursorLeft: function() {
+      if (isRtl()) {
+        // In the RTL layout the Left arrow walks the index up, revealing the far (left) edge
+        // from the last field.
+        if (this.cursor.fieldIndex() === this.viewSection.viewFields().peekLength - 1) {
+          this.scrollPaneRight();
+        }
+        this.cursor.fieldIndex(this.cursor.fieldIndex() + 1);
+        return;
+      }
       if (this.cursor.fieldIndex() === 0) {
         // When the cursor is in the leftmost column, the view may not be scrolled all the way to
         // the left (i.e. in the case of a wide column).
@@ -529,12 +549,13 @@ export default class GridView extends BaseView {
     },
     shiftDown: function() { this._shiftSelect({ step: 1, direction: "down" }); },
     shiftUp: function() { this._shiftSelect({ step: 1, direction: "up" }); },
-    shiftRight: function() { this._shiftSelect({ step: 1, direction: "right" }); },
-    shiftLeft: function() { this._shiftSelect({ step: 1, direction: "left" }); },
+    // Arrow keys follow the visual direction: in RTL the field index grows to the left.
+    shiftRight: function() { this._shiftSelect({ step: 1, direction: isRtl() ? "left" : "right" }); },
+    shiftLeft: function() { this._shiftSelect({ step: 1, direction: isRtl() ? "right" : "left" }); },
     ctrlShiftDown: function() { this._shiftSelectUntilFirstOrLastNonEmptyCell({ direction: "down" }); },
     ctrlShiftUp: function() { this._shiftSelectUntilFirstOrLastNonEmptyCell({ direction: "up" }); },
-    ctrlShiftRight: function() { this._shiftSelectUntilFirstOrLastNonEmptyCell({ direction: "right" }); },
-    ctrlShiftLeft: function() { this._shiftSelectUntilFirstOrLastNonEmptyCell({ direction: "left" }); },
+    ctrlShiftRight: function() { this._shiftSelectUntilFirstOrLastNonEmptyCell({ direction: isRtl() ? "left" : "right" }); },
+    ctrlShiftLeft: function() { this._shiftSelectUntilFirstOrLastNonEmptyCell({ direction: isRtl() ? "right" : "left" }); },
     fieldEditSave: function() { this.cursor.rowIndex(this.cursor.rowIndex()! + 1); },
     // Re-define editField after fieldEditSave to make it take precedence for the Enter key.
     editField: function(event?: KeyboardEvent) {
@@ -1594,7 +1615,7 @@ export default class GridView extends BaseView {
                       dom.on("click", ev =>
                         this.maybeSelectColumn((ev.currentTarget as HTMLElement).parentElement!, field)),
                       (elem: Element) => {
-                        filterTriggerCtl = setPopupToCreateDom(
+                        filterTriggerCtl = rtlSetPopupToCreateDom(
                           elem,
                           ctl => this._columnFilterMenu(ctl, field, { showAllFiltersButton: true }),
                           {
@@ -1626,7 +1647,11 @@ export default class GridView extends BaseView {
           ), // END COL HEADER BOX
 
           koDomScrolly.scrolly(data, {
-            ...(this._inline ? {} : { paddingBottom: 80, paddingRight: 20 }),
+            ...(this._inline ? {} : {
+              paddingBottom: 80,
+              // Room to scroll the last column past the edge; the far side depends on the flow.
+              ...(isRtl() ? { paddingLeft: 20 } : { paddingRight: 20 }),
+            }),
             cb: this._onRenderedVisibleRows.bind(this),
           }, renderRow.bind(this)),
 
