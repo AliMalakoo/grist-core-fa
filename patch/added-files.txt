@@ -11,4 +11,5 @@ static/fonts/vazirmatn/vazirmatn-arabic-400-normal.woff2
 static/fonts/vazirmatn/vazirmatn-arabic-700-normal.woff2
 static/fonts/vazirmatn/vazirmatn-latin-400-normal.woff2
 static/fonts/vazirmatn/vazirmatn-latin-700-normal.woff2
+static/ui-icons/UI/ExpandArrows.svg
 test/common/jalali.ts

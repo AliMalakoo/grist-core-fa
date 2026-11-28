@@ -1,3 +1,24 @@
+diff --git a/app/client/components/BaseView.ts b/app/client/components/BaseView.ts
+index bbf5bbbb3..6074dad29 100644
+--- a/app/client/components/BaseView.ts
++++ b/app/client/components/BaseView.ts
+@@ -1013,8 +1013,15 @@ export default class BaseView extends DisposableWithEvents {
+   public viewSelectedRecordAsCard(): void {
+     if (this.isRecordCardDisabled()) { return; }
+ 
+-    const colRef = this.viewSection.viewFields().at(this.cursor.fieldIndex())!.column().id();
+     const rowId = this.viewData.getRowId(this.cursor.rowIndex()!);
++    this.viewRecordAsCard(rowId);
++  }
++
++  /** View the given record in its Record Card section, as the "View as card" command does. */
++  public viewRecordAsCard(rowId: UIRowId): void {
++    if (this.isRecordCardDisabled()) { return; }
++
++    const colRef = this.viewSection.viewFields().at(this.cursor.fieldIndex())!.column().id();
+     const sectionId = this.viewSection.tableRecordCard().id();
+     const anchorUrlState = { hash: { colRef, rowId, sectionId, recordCard: true } };
+     urlState().pushUrl(anchorUrlState, { replace: true }).catch(reportError);
 diff --git a/app/client/components/CalendarSource.ts b/app/client/components/CalendarSource.ts
 index b6fcdd5fb..a573a9397 100644
 --- a/app/client/components/CalendarSource.ts
@@ -485,11 +506,75 @@ index 36a14e2ff..7f1d0b3b6 100644
                ...defaultMenuOptions,
                placement: "top-end",
              });
+diff --git a/app/client/components/GridView.css b/app/client/components/GridView.css
+index 723552029..e42b443df 100644
+--- a/app/client/components/GridView.css
++++ b/app/client/components/GridView.css
+@@ -14,7 +14,7 @@
+   --gridview-header-height: 24px;
+   /* Width of the row-number gutter, and of the record's left border beside it. Both are set
+    * from JS on this element (both zero when row numbers are hidden); these are the defaults. */
+-  --row-num-width: 52px;
++  --row-num-width: 72px;
+   --row-num-border: 1px;
+ }
+ 
+@@ -117,6 +117,32 @@
+   right: 0px;
+ }
+ 
++/* Per-row button to open the record in a card; sits on the flow-start edge of the gutter,
++   away from the row number and the selection check, and never covers either. */
++.record_card_toggle {
++  position: absolute;
++  left: 2px;
++  top: 50%;
++  transform: translateY(-50%);
++  z-index: 21; /* above the sticky gutter's content, below menus */
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 18px;
++  height: 18px;
++  padding: 0;
++  border: none;
++  border-radius: 4px;
++  background: transparent;
++  color: var(--grist-theme-text-light, #929299);
++  cursor: pointer;
++}
++.record_card_toggle:hover,
++.record_card_toggle:focus-visible {
++  color: var(--grist-theme-text, #262b33);
++  background: var(--grist-theme-hover, rgba(38, 43, 51, 0.08));
++}
++
+ /* Show on hover or when menu is opened */
+ .gridview_data_row_num:hover .menu_toggle,
+ .gridview_data_row_num .menu_toggle.weasel-popup-open  {
+@@ -125,6 +151,9 @@
+ 
+ 
+ @media print {
++  .record_card_toggle {
++    display: none;
++  }
+   /* For printing, !important tag is needed for background colors to be respected; but normally,
+    * do not want !important, as it interferes with row selection.
+    */
 diff --git a/app/client/components/GridView.ts b/app/client/components/GridView.ts
-index a468e9119..5c0a722b3 100644
+index a468e9119..d232a5f5e 100644
 --- a/app/client/components/GridView.ts
 +++ b/app/client/components/GridView.ts
-@@ -59,6 +59,8 @@ import { Sort } from "app/common/SortSpec";
+@@ -42,6 +42,7 @@ import {
+   freezeAction,
+   IMultiColumnContextMenu,
+ } from "app/client/ui/GridViewMenus";
++import { icon } from "app/client/ui2018/icons";
+ import { menuToggle } from "app/client/ui/MenuToggle";
+ import { mouseDragMatchElem } from "app/client/ui/mouseDrag";
+ import { IRowContextMenu, RowContextMenu } from "app/client/ui/RowContextMenu";
+@@ -59,6 +60,8 @@ import { Sort } from "app/common/SortSpec";
  import { CombinedStyle } from "app/common/Styles";
  import { CursorPos, UIRowId } from "app/plugin/GristAPI";
  
@@ -498,7 +583,7 @@ index a468e9119..5c0a722b3 100644
  import convert from "color-convert";
  import {
    BindableValue,
-@@ -79,7 +81,7 @@ import {
+@@ -79,7 +82,7 @@ import {
  import ko from "knockout";
  import debounce from "lodash/debounce";
  import identity from "lodash/identity";
@@ -507,7 +592,16 @@ index a468e9119..5c0a722b3 100644
  import _ from "underscore";
  
  // Disable member-ordering linting temporarily, so that it's easier to review the conversion to
-@@ -512,6 +514,15 @@ export default class GridView extends BaseView {
+@@ -111,7 +114,7 @@ type FreeSpaceRenderer = (owner: IDisposableOwner, view: GridView) => DomContent
+ // size of the plus width
+ const PLUS_WIDTH = 40;
+ // size of the row number field
+-const ROW_NUMBER_WIDTH = 52;
++const ROW_NUMBER_WIDTH = 72;
+ 
+ interface InsertColOptions {
+   colInfo?: ColInfo;
+@@ -512,6 +515,15 @@ export default class GridView extends BaseView {
        this.cursor.rowIndex(this.cursor.rowIndex()! - 1);
      },
      cursorRight: function() {
@@ -523,7 +617,7 @@ index a468e9119..5c0a722b3 100644
        if (this.cursor.fieldIndex() === this.viewSection.viewFields().peekLength - 1) {
          // When the cursor is in the rightmost column, the view may not be scrolled all the way to
          // the right (i.e. in the case of a wide column).
-@@ -520,6 +531,15 @@ export default class GridView extends BaseView {
+@@ -520,6 +532,15 @@ export default class GridView extends BaseView {
        this.cursor.fieldIndex(this.cursor.fieldIndex() + 1);
      },
      cursorLeft: function() {
@@ -539,7 +633,7 @@ index a468e9119..5c0a722b3 100644
        if (this.cursor.fieldIndex() === 0) {
          // When the cursor is in the leftmost column, the view may not be scrolled all the way to
          // the left (i.e. in the case of a wide column).
-@@ -529,12 +549,13 @@ export default class GridView extends BaseView {
+@@ -529,12 +550,13 @@ export default class GridView extends BaseView {
      },
      shiftDown: function() { this._shiftSelect({ step: 1, direction: "down" }); },
      shiftUp: function() { this._shiftSelect({ step: 1, direction: "up" }); },
@@ -557,7 +651,7 @@ index a468e9119..5c0a722b3 100644
      fieldEditSave: function() { this.cursor.rowIndex(this.cursor.rowIndex()! + 1); },
      // Re-define editField after fieldEditSave to make it take precedence for the Enter key.
      editField: function(event?: KeyboardEvent) {
-@@ -571,7 +592,7 @@ export default class GridView extends BaseView {
+@@ -571,7 +593,7 @@ export default class GridView extends BaseView {
      this.onScroll();
  
      // Initialize scroll position.
@@ -566,7 +660,7 @@ index a468e9119..5c0a722b3 100644
      this.scrolly.scrollToSavedPos(this.viewSection.lastScrollPos);
  
      if (this._inline) {
-@@ -1169,11 +1190,11 @@ export default class GridView extends BaseView {
+@@ -1169,11 +1191,11 @@ export default class GridView extends BaseView {
    }
  
    protected scrollPaneRight() {
@@ -580,7 +674,7 @@ index a468e9119..5c0a722b3 100644
    }
  
    protected selectColumn(colIndex: number) {
-@@ -1309,14 +1330,19 @@ export default class GridView extends BaseView {
+@@ -1309,14 +1331,19 @@ export default class GridView extends BaseView {
     *        |0____|1____|..5|6__*_|         Returns 6
     *        |0____|1____|..5|6____| *       Returns 6
     **/
@@ -606,7 +700,7 @@ index a468e9119..5c0a722b3 100644
      // Total width of frozen columns (if zero, no frozen column set)
      const frozenWidth = this.frozenWidth.peek();
      // Frozen columns can be scrolled also, but not more then frozenOffset.
-@@ -1386,7 +1412,7 @@ export default class GridView extends BaseView {
+@@ -1386,7 +1413,7 @@ export default class GridView extends BaseView {
    // TODO : is this necessary? make passive. Also this could be removed soon I think
    protected onScroll() {
      const pane = this.scrollPane;
@@ -615,7 +709,7 @@ index a468e9119..5c0a722b3 100644
      this.scrollTop(pane.scrollTop);
      this.width(pane.clientWidth);
    }
-@@ -1461,12 +1487,12 @@ export default class GridView extends BaseView {
+@@ -1461,12 +1488,12 @@ export default class GridView extends BaseView {
        this.colLine = dom(
          "div.col_indicator_line",
          kd.show(() => this.cellSelector.isCurrentDragType(selector.COL)),
@@ -630,7 +724,7 @@ index a468e9119..5c0a722b3 100644
        ),
        this.rowLine = dom(
          "div.row_indicator_line",
-@@ -1487,7 +1513,7 @@ export default class GridView extends BaseView {
+@@ -1487,7 +1514,7 @@ export default class GridView extends BaseView {
            dom.onDispose(() => {
            // Save the previous scroll values to the section.
              this.viewSection.lastScrollPos = _.extend({
@@ -639,7 +733,7 @@ index a468e9119..5c0a722b3 100644
              }, this.scrolly.getScrollPos());
            }),
  
-@@ -1589,7 +1615,7 @@ export default class GridView extends BaseView {
+@@ -1589,7 +1616,7 @@ export default class GridView extends BaseView {
                        dom.on("click", ev =>
                          this.maybeSelectColumn((ev.currentTarget as HTMLElement).parentElement!, field)),
                        (elem: Element) => {
@@ -648,7 +742,7 @@ index a468e9119..5c0a722b3 100644
                            elem,
                            ctl => this._columnFilterMenu(ctl, field, { showAllFiltersButton: true }),
                            {
-@@ -1621,7 +1647,11 @@ export default class GridView extends BaseView {
+@@ -1621,7 +1648,11 @@ export default class GridView extends BaseView {
            ), // END COL HEADER BOX
  
            koDomScrolly.scrolly(data, {
@@ -661,7 +755,34 @@ index a468e9119..5c0a722b3 100644
              cb: this._onRenderedVisibleRows.bind(this),
            }, renderRow.bind(this)),
  
-@@ -1960,7 +1990,7 @@ export default class GridView extends BaseView {
+@@ -1708,6 +1739,26 @@ export default class GridView extends BaseView {
+ 
+         // rowid dom
+         dom("div.gridview_data_row_num",
++          // Open this record as a card; sits on the flow-start edge of the gutter, clear of
++          // the row number and of the selection check shown on hover. Hidden when row
++          // numbers are hidden (the gutter is 0px wide and clips its contents).
++          row._isAddRow() ? null :
++            dom.maybe((use) =>
++              use(this.viewSection.optionsObj).rowNumbers !== "hidden" &&
++              !use(this.viewSection.isTableRecordCardDisabled) &&
++              !use(this.viewSection.isVirtual), () =>
++              dom("button.record_card_toggle",
++                icon("ExpandArrows"),
++                dom.attr("title", t("View record as card")),
++                dom.attr("aria-label", t("View record as card")),
++                testId("record-card-toggle"),
++                dom.on("mousedown", (ev) => { ev.stopPropagation(); ev.preventDefault(); }),
++                dom.on("click", (ev) => {
++                  ev.stopPropagation();
++                  ev.preventDefault();
++                  this.viewRecordAsCard(row.getRowId());
++                }),
++              )),
+           dom("div.gridview_data_row_info",
+             dom.cls("linked_dst", (use) => {
+               const myRowId = use(row.id);
+@@ -1960,7 +2011,7 @@ export default class GridView extends BaseView {
    protected colMouseMove(event: MouseEvent) {
      if (this.gristDoc.docModel.editingFormula.peek()) { return; }
  
@@ -670,7 +791,7 @@ index a468e9119..5c0a722b3 100644
        this.viewSection.viewFields().peekLength - 1);
      this.cellSelector.col.end(currentCol);
    }
-@@ -2070,12 +2100,14 @@ export default class GridView extends BaseView {
+@@ -2070,12 +2121,14 @@ export default class GridView extends BaseView {
      const colStart = this.cellSelector.colLower();
      const colEnd = this.cellSelector.colUpper();
      const shadowWidth = this.colRightOffsets.peek().getCumulativeValueRange(colStart, colEnd + 1);
@@ -689,7 +810,7 @@ index a468e9119..5c0a722b3 100644
      this.cellSelector.currentDragType(selector.COL);
      this.cellSelector.col.dropIndex(this.cellSelector.colLower());
    }
-@@ -2110,7 +2142,7 @@ export default class GridView extends BaseView {
+@@ -2110,7 +2163,7 @@ export default class GridView extends BaseView {
    }
  
    protected dragCols(event: MouseEvent) {
@@ -698,7 +819,7 @@ index a468e9119..5c0a722b3 100644
        this.viewSection.viewFields().peekLength - 1);
      if (this.cellSelector.containsCol(dropIndex)) {
        dropIndex = this.cellSelector.colLower();
-@@ -2135,7 +2167,7 @@ export default class GridView extends BaseView {
+@@ -2135,7 +2188,7 @@ export default class GridView extends BaseView {
      }
      this.cellSelector.col.linePos(linePos + "px");
      this.cellSelector.col.dropIndex(dropIndex);
@@ -707,7 +828,7 @@ index a468e9119..5c0a722b3 100644
    }
  
    protected dropRows() {
-@@ -2366,12 +2398,13 @@ export default class GridView extends BaseView {
+@@ -2366,12 +2419,13 @@ export default class GridView extends BaseView {
  
        // Left and right pixel edge of 'viewport', starting from edge of row nums.
        const frozenWidth = this.frozenWidth.peek();
@@ -723,7 +844,7 @@ index a468e9119..5c0a722b3 100644
      }
    }
  
-@@ -2608,6 +2641,37 @@ function calcZebra(hex: string) {
+@@ -2608,6 +2662,37 @@ function calcZebra(hex: string) {
    return `#${convert.hsl.hex(hsl)}`;
  }
  
@@ -761,7 +882,7 @@ index a468e9119..5c0a722b3 100644
  // Currently dom.style('--custom-prop', value) from grainjs doesn't work for "custom variable"
  // properties, so we add a helper to do that. TODO: fix grainjs to support this.
  function styleCustomVar(property: string, valueObs: BindableValue<string | number>): DomElementMethod {
-@@ -2624,8 +2688,7 @@ function scrollBar(): { width: number; height: number } {
+@@ -2624,8 +2709,7 @@ function scrollBar(): { width: number; height: number } {
  
  const cssFreeSpace = styled("div", `
    position: absolute;
@@ -1470,6 +1591,27 @@ index 533ac37ff..c2e142c1d 100644
  
    return iconBtn;
  }
+diff --git a/app/client/ui2018/IconList.ts b/app/client/ui2018/IconList.ts
+index ae6faf141..aa3197915 100644
+--- a/app/client/ui2018/IconList.ts
++++ b/app/client/ui2018/IconList.ts
+@@ -72,6 +72,7 @@ export const IconList = [
+   "Empty",
+   "Exclamation",
+   "Expand",
++  "ExpandArrows",
+   "EyeHide",
+   "EyeShow",
+   "Feedback",
+@@ -176,7 +177,7 @@ export const IconList = [
+   "UseOther",
+   "UseProduct",
+   "UseSales",
+-  "UseScience",
++  "UseScience"
+ ] as const;
+ 
+ export type IconName = (typeof IconList)[number];
 diff --git a/app/client/ui2018/ariaTabs.ts b/app/client/ui2018/ariaTabs.ts
 index 31060eaa4..29c20a2a7 100644
 --- a/app/client/ui2018/ariaTabs.ts
@@ -2409,8 +2551,20 @@ index cd4e91262..e1e120aa5 100644
  interface LogVisitedPageEventOptions {
    server: GristServer;
    pagePath: string;
+diff --git a/assets/locales/en.client.json b/assets/locales/en.client.json
+index 986a19d3a..12dc39b84 100644
+--- a/assets/locales/en.client.json
++++ b/assets/locales/en.client.json
+@@ -1658,6 +1658,7 @@
+     },
+     "GridView": {
+         "Click to insert": "Click to insert",
++    "View record as card": "View record as card",
+         "ID": "ID",
+         "row {{rowNum}} {{colName}}": "row {{rowNum}} {{colName}}",
+         "row {{rowNum}} {{colName}} (new row)": "row {{rowNum}} {{colName}} (new row)"
 diff --git a/assets/locales/fa.client.json b/assets/locales/fa.client.json
-index 058b3425d..413d6d84f 100644
+index 058b3425d..0a70ba871 100644
 --- a/assets/locales/fa.client.json
 +++ b/assets/locales/fa.client.json
 @@ -1,18 +1,31 @@
@@ -2467,7 +2621,7 @@ index 058b3425d..413d6d84f 100644
      "Seed rules": "قواعد دانه(Seed)",
      "Allow everyone to copy the entire document, or view it in full in fiddle mode.\nUseful for examples and templates, but not for sensitive data.": "به همه اجازه دهید کل سند را کپی کنند، یا آن را به صورت کامل در حالت ور رفتن مشاهده کنند.\nمفید برای نمونه‌ها و قالب‌ها، اما نه برای داده‌های حساس.",
      "Lookup Column": "جستجوی ستون",
-@@ -44,9 +52,1799 @@
+@@ -44,9 +52,1800 @@
      "Permission to edit document structure": "اجازه‌ی ویرایش ساختار سند",
      "Add table-wide rule": "افزودن قانون سراسری جدول"
    },
@@ -3328,7 +3482,8 @@ index 058b3425d..413d6d84f 100644
 +    "row numbers": "شماره ردیف‌ها"
 +  },
 +  "GridView": {
-+    "ID": "شناسه"
++    "ID": "شناسه",
++    "View record as card": "مشاهدهٔ رکورد به صورت کارت"
 +  },
 +  "GridViewMenus": {
 +    "Add column": "افزودن ستون",
@@ -4401,6 +4556,18 @@ index 3b557cac3..5560d5a63 100644
    return dateutil.parser.parse(date_string).replace(tzinfo=_get_tzinfo(tz))
  
  
+diff --git a/static/icons/icons.css b/static/icons/icons.css
+index 020c2497c..b5275159b 100644
+--- a/static/icons/icons.css
++++ b/static/icons/icons.css
+@@ -73,6 +73,7 @@
+     --icon-Empty: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDUuMjkyIDUuMjkyIj48cGF0aCBkPSJtIDAuMDMyNjIyNjMsMjkxLjcyMjI1IDUuMjMwMDMyMjcsNS4yNzY5IiBzdHlsZT0iZmlsbDpub25lO3N0cm9rZTojMDAwO3N0cm9rZS13aWR0aDouNTI5MTY2NztzdHJva2UtbGluZWNhcDpidXR0O3N0cm9rZS1saW5lam9pbjptaXRlcjtzdHJva2UtbWl0ZXJsaW1pdDo0O3N0cm9rZS1kYXNoYXJyYXk6bm9uZTtzdHJva2Utb3BhY2l0eToxO3BhaW50LW9yZGVyOm5vcm1hbCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCAtMjkxLjcwOCkiLz48L3N2Zz4=');
+     --icon-Exclamation: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgZmlsbD0ibm9uZSI+PHBhdGggZmlsbD0iIzAwMCIgZD0iTTkuNSAxSDYuNUw3IDEwSDlMOS41IDFaTTggMTVDOC44Mjg0MyAxNSA5LjUgMTQuMzI4NCA5LjUgMTMuNSA5LjUgMTIuNjcxNiA4LjgyODQzIDEyIDggMTIgNy4xNzE1NyAxMiA2LjUgMTIuNjcxNiA2LjUgMTMuNSA2LjUgMTQuMzI4NCA3LjE3MTU3IDE1IDggMTVaIi8+PC9zdmc+');
+     --icon-Expand: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PHBhdGggZmlsbD0iIzAwMCIgZmlsbC1ydWxlPSJub256ZXJvIiBkPSJNOCw5LjE3NDYzMDUyIEwxMC45MjE4MjczLDYuMTg5MDIzMiBDMTEuMTY4NDc0Miw1LjkzNjk5MjI3IDExLjU2ODM2NzksNS45MzY5OTIyNyAxMS44MTUwMTQ4LDYuMTg5MDIzMiBDMTIuMDYxNjYxNyw2LjQ0MTA1NDEzIDEyLjA2MTY2MTcsNi44NDk2NzcwMSAxMS44MTUwMTQ4LDcuMTAxNzA3OTQgTDgsMTEgTDQuMTg0OTg1MTksNy4xMDE3MDc5NCBDMy45MzgzMzgyNyw2Ljg0OTY3NzAxIDMuOTM4MzM4MjcsNi40NDEwNTQxMyA0LjE4NDk4NTE5LDYuMTg5MDIzMiBDNC40MzE2MzIxMSw1LjkzNjk5MjI3IDQuODMxNTI1NzgsNS45MzY5OTIyNyA1LjA3ODE3MjcsNi4xODkwMjMyIEw4LDkuMTc0NjMwNTIgWiIgdHJhbnNmb3JtPSJyb3RhdGUoLTkwIDggOC41KSIvPjwvc3ZnPg==');
++    --icon-ExpandArrows: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NDggNTEyIj48cGF0aCBmaWxsPSJjdXJyZW50Q29sb3IiIGQ9Ik0zMiAzMkMxNC4zIDMyIDAgNDYuMyAwIDY0bDAgOTZjMCAxNy43IDE0LjMgMzIgMzIgMzJzMzItMTQuMyAzMi0zMmwwLTY0IDY0IDBjMTcuNyAwIDMyLTE0LjMgMzItMzJzLTE0LjMtMzItMzItMzJMMzIgMzJ6TTY0IDM1MmMwLTE3LjctMTQuMy0zMi0zMi0zMlMwIDMzNC4zIDAgMzUybDAgOTZjMCAxNy43IDE0LjMgMzIgMzIgMzJsOTYgMGMxNy43IDAgMzItMTQuMyAzMi0zMnMtMTQuMy0zMi0zMi0zMmwtNjQgMCAwLTY0ek0zMjAgMzJjLTE3LjcgMC0zMiAxNC4zLTMyIDMyczE0LjMgMzIgMzIgMzJsNjQgMCAwIDY0YzAgMTcuNyAxNC4zIDMyIDMyIDMyczMyLTE0LjMgMzItMzJsMC05NmMwLTE3LjctMTQuMy0zMi0zMi0zMmwtOTYgMHpNNDQ4IDM1MmMwLTE3LjctMTQuMy0zMi0zMi0zMnMtMzIgMTQuMy0zMiAzMmwwIDY0LTY0IDBjLTE3LjcgMC0zMiAxNC4zLTMyIDMyczE0LjMgMzIgMzIgMzJsOTYgMGMxNy43IDAgMzItMTQuMyAzMi0zMmwwLTk2eiIvPjwvc3ZnPg==');
+     --icon-EyeHide: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PHBhdGggZmlsbD0iIzAwMCIgZmlsbC1ydWxlPSJub256ZXJvIiBkPSJNMi43Njc4NTAwNSw4LjM4Nzc2MTg2IEw4LjQ4MjQ3ODY1LDIuOTQ1MjU4NDMgQzcuNjkxMzc4OTEsMi4zMzc3ODQ3OCA2Ljg1OTU2NTI3LDIgNiwyIEM0LjY4NzE1Nzc5LDIgMy40MzkwNTMwNiwyLjc4Nzk2NTkxIDIuMzAxODY4ODMsNC4xMjEyODAyMiBDMS44OTUwOTk5MSw0LjU5ODIwNDU1IDEuNTMyNzI3ODQsNS4xMTA5NzkxMSAxLjIyMDU0MTc0LDUuNjIzNDE5NDQgQzEuMTMzOTQxMDEsNS43NjU1NzA5IDEuMDYwMjYyMTgsNS44OTIzMTU0OCAxLDYgQzEuMDYwMjYyMTgsNi4xMDc2ODQ1MiAxLjEzMzk0MTAxLDYuMjM0NDI5MSAxLjIyMDU0MTc0LDYuMzc2NTgwNTYgQzEuNTMyNzI3ODQsNi44ODkwMjA4OSAxLjg5NTA5OTkxLDcuNDAxNzk1NDUgMi4zMDE4Njg4Myw3Ljg3ODcxOTc4IEMyLjQ1NTIxNjY2LDguMDU4NTE1NDkgMi42MTA1ODE0OCw4LjIyODM5NDQ5IDIuNzY3ODUwMDUsOC4zODc3NjE4NiBaIE0zLjUxNzUyMTM1LDkuMDU0NzQxNTcgQzQuMzA4NjIxMDksOS42NjIyMTUyMiA1LjE0MDQzNDczLDEwIDYsMTAgQzcuMzEyODQyMjEsMTAgOC41NjA5NDY5NCw5LjIxMjAzNDA5IDkuNjk4MTMxMTcsNy44Nzg3MTk3OCBDMTAuMTA0OTAwMSw3LjQwMTc5NTQ1IDEwLjQ2NzI3MjIsNi44ODkwMjA4OSAxMC43Nzk0NTgzLDYuMzc2NTgwNTYgQzEwLjg2NjA1OSw2LjIzNDQyOTEgMTAuOTM5NzM3OCw2LjEwNzY4NDUyIDExLDYgQzEwLjkzOTczNzgsNS44OTIzMTU0OCAxMC44NjYwNTksNS43NjU1NzA5IDEwLjc3OTQ1ODMsNS42MjM0MTk0NCBDMTAuNDY3MjcyMiw1LjExMDk3OTExIDEwLjEwNDkwMDEsNC41OTgyMDQ1NSA5LjY5ODEzMTE3LDQuMTIxMjgwMjIgQzkuNTQ0NzgzMzQsMy45NDE0ODQ1MSA5LjM4OTQxODUyLDMuNzcxNjA1NTEgOS4yMzIxNDk5NSwzLjYxMjIzODE0IEwzLjUxNzUyMTM1LDkuMDU0NzQxNTcgWiBNOS4xOTgwNDkzMSwyLjI2Mzc2MjU3IEwxMC45MDUxNzI0LDAuNjM3OTMxMDM0IEMxMS4xMDUxMzc2LDAuNDQ3NDg4MDE3IDExLjQyMTYyNTksMC40NTUyMDcyNDYgMTEuNjEyMDY5LDAuNjU1MTcyNDE0IEMxMS44MDI1MTIsMC44NTUxMzc1ODIgMTEuNzk0NzkyOCwxLjE3MTYyNTk1IDExLjU5NDgyNzYsMS4zNjIwNjg5NyBMOS45MzU4NzU3MSwyLjk0MjAyMzEzIEMxMC4wNzI2MjI0LDMuMDgyNDQ2NTMgMTAuMjA3NjE5OSwzLjIyOTQzMzkgMTAuMzQwODQyNiwzLjM4MjYzMjA1IEMxMC43ODMyMzI5LDMuODkxMzU0NDcgMTEuMTc0NzIzMSw0LjQzNDY4NzU1IDExLjUxMjQxNTUsNC45NzgzNDQwOSBDMTEuNzE2MzQxLDUuMzA2NjQ3MTggMTEuODU4NTM2Niw1LjU2NTEwODYzIDExLjkzNTIyOCw1LjcxOTQ0MjEyIEMxMi4wMjE1OTA3LDUuODkzMjM3ODIgMTIuMDIxNTkwNyw2LjEwNjc2MjE4IDExLjkzNTIyOCw2LjI4MDU1Nzg4IEMxMS44NTg1MzY2LDYuNDM0ODkxMzcgMTEuNzE2MzQxLDYuNjkzMzUyODIgMTEuNTEyNDE1NSw3LjAyMTY1NTkxIEMxMS4xNzQ3MjMxLDcuNTY1MzEyNDUgMTAuNzgzMjMyOSw4LjEwODY0NTUzIDEwLjM0MDg0MjYsOC42MTczNjc5NSBDOS4wNTIxOTAyNiwxMC4wOTkyNDEyIDcuNTk3NDczMTUsMTEgNiwxMSBDNC44NTgyMTg4NiwxMSAzLjc4OTM2NTUyLDEwLjUzOTg0MTkgMi44MDE5NTA2OSw5LjczNjIzNzQzIEwxLjA5NDgyNzU5LDExLjM2MjA2OSBDMC44OTQ4NjI0MTgsMTEuNTUyNTEyIDAuNTc4Mzc0MDUyLDExLjU0NDc5MjggMC4zODc5MzEwMzQsMTEuMzQ0ODI3NiBDMC4xOTc0ODgwMTcsMTEuMTQ0ODYyNCAwLjIwNTIwNzI0NiwxMC44MjgzNzQxIDAuNDA1MTcyNDE0LDEwLjYzNzkzMSBMMi4wNjQxMjQyOSw5LjA1Nzk3Njg3IEMxLjkyNzM3NzYzLDguOTE3NTUzNDcgMS43OTIzODAwNyw4Ljc3MDU2NjEgMS42NTkxNTczNyw4LjYxNzM2Nzk1IEMxLjIxNjc2NzA3LDguMTA4NjQ1NTMgMC44MjUyNzY5MjgsNy41NjUzMTI0NSAwLjQ4NzU4NDUyMSw3LjAyMTY1NTkxIEMwLjI4MzY1ODk2Niw2LjY5MzM1MjgyIDAuMTQxNDYzMzc4LDYuNDM0ODkxMzcgMC4wNjQ3NzE5NTA0LDYuMjgwNTU3ODggQy0wLjAyMTU5MDY1MDEsNi4xMDY3NjIxOCAtMC4wMjE1OTA2NTAxLDUuODkzMjM3ODIgMC4wNjQ3NzE5NTA0LDUuNzE5NDQyMTIgQzAuMTQxNDYzMzc4LDUuNTY1MTA4NjMgMC4yODM2NTg5NjYsNS4zMDY2NDcxOCAwLjQ4NzU4NDUyMSw0Ljk3ODM0NDA5IEMwLjgyNTI3NjkyOCw0LjQzNDY4NzU1IDEuMjE2NzY3MDcsMy44OTEzNTQ0NyAxLjY1OTE1NzM3LDMuMzgyNjMyMDUgQzIuOTQ3ODA5NzQsMS45MDA3NTg4IDQuNDAyNTI2ODUsMSA2LDEgQzcuMTQxNzgxMTQsMSA4LjIxMDYzNDQ4LDEuNDYwMTU4MTQgOS4xOTgwNDkzMSwyLjI2Mzc2MjU3IFogTTQuMjUsNiBDNC4yNSw2LjI3NjE0MjM3IDQuMDI2MTQyMzcsNi41IDMuNzUsNi41IEMzLjQ3Mzg1NzYzLDYuNSAzLjI1LDYuMjc2MTQyMzcgMy4yNSw2IEMzLjI1LDQuNTM0NjgyNTQgNC40ODY0MTY2NywzLjM1NzE0Mjg2IDYsMy4zNTcxNDI4NiBDNi4yNzYxNDIzNywzLjM1NzE0Mjg2IDYuNSwzLjU4MTAwMDQ4IDYuNSwzLjg1NzE0Mjg2IEM2LjUsNC4xMzMyODUyMyA2LjI3NjE0MjM3LDQuMzU3MTQyODYgNiw0LjM1NzE0Mjg2IEM1LjAyODA4MzMzLDQuMzU3MTQyODYgNC4yNSw1LjA5ODE3NDYgNC4yNSw2IFogTTcuNzUsNiBDNy43NSw1LjcyMzg1NzYzIDcuOTczODU3NjMsNS41IDguMjUsNS41IEM4LjUyNjE0MjM3LDUuNSA4Ljc1LDUuNzIzODU3NjMgOC43NSw2IEM4Ljc1LDcuNDY1MzE3NDYgNy41MTM1ODMzMyw4LjY0Mjg1NzE0IDYsOC42NDI4NTcxNCBDNS43MjM4NTc2Myw4LjY0Mjg1NzE0IDUuNSw4LjQxODk5OTUyIDUuNSw4LjE0Mjg1NzE0IEM1LjUsNy44NjY3MTQ3NyA1LjcyMzg1NzYzLDcuNjQyODU3MTQgNiw3LjY0Mjg1NzE0IEM2Ljk3MTkxNjY3LDcuNjQyODU3MTQgNy43NSw2LjkwMTgyNTQgNy43NSw2IFoiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDIgMikiLz48L3N2Zz4=');
+     --icon-EyeShow: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PHBhdGggZmlsbD0iIzAwMCIgZmlsbC1ydWxlPSJub256ZXJvIiBkPSJNMy4yMzUwMDQ3Nyw4LjQwMDQwMDM3IEMzLjU0NzMwNDc5LDguOTEwMzQxODIgMy45MDk3Mzk1LDkuNDIwNTE3OTEgNC4zMTY0Nzk3MSw5Ljg5NDkwOTkzIEM1LjQ1MTQxOTI2LDExLjIxODYyMDQgNi42OTU2MTA0MywxMiA4LDEyIEM5LjMwNDM4OTU3LDEyIDEwLjU0ODU4MDcsMTEuMjE4NjIwNCAxMS42ODM1MjAzLDkuODk0OTA5OTMgQzEyLjA5MDI2MDUsOS40MjA1MTc5MSAxMi40NTI2OTUyLDguOTEwMzQxODIgMTIuNzY0OTk1Miw4LjQwMDQwMDM3IEMxMi44NTg1NzQ3LDguMjQ3NTk4NDQgMTIuOTM3MTE2NCw4LjExMjYxMDY0IDEzLDggQzEyLjkzNzExNjQsNy44ODczODkzNiAxMi44NTg1NzQ3LDcuNzUyNDAxNTYgMTIuNzY0OTk1Miw3LjU5OTU5OTYzIEMxMi40NTI2OTUyLDcuMDg5NjU4MTggMTIuMDkwMjYwNSw2LjU3OTQ4MjA5IDExLjY4MzUyMDMsNi4xMDUwOTAwNyBDMTAuNTQ4NTgwNyw0Ljc4MTM3OTYxIDkuMzA0Mzg5NTcsNCA4LDQgQzYuNjk1NjEwNDMsNCA1LjQ1MTQxOTI2LDQuNzgxMzc5NjEgNC4zMTY0Nzk3MSw2LjEwNTA5MDA3IEMzLjkwOTczOTUsNi41Nzk0ODIwOSAzLjU0NzMwNDc5LDcuMDg5NjU4MTggMy4yMzUwMDQ3Nyw3LjU5OTU5OTYzIEMzLjE0MTQyNTMxLDcuNzUyNDAxNTYgMy4wNjI4ODM1OCw3Ljg4NzM4OTM2IDMsOCBDMy4wNjI4ODM1OCw4LjExMjYxMDY0IDMuMTQxNDI1MzEsOC4yNDc1OTg0NCAzLjIzNTAwNDc3LDguNDAwNDAwMzcgWiBNMi4wNTk4MDYyNSw3Ljc0MTE2MTAxIEMyLjEzNjA0ODExLDcuNTg2OTAyODggMi4yNzc3NTg2Nyw3LjMyNzkzMDcxIDIuNDgxMTU5MDYsNi45OTg3MDMwNyBDMi44MTgyMjQ4OCw2LjQ1MzEyMjA1IDMuMjA5MDU2NDgsNS45MDc3NzA5MiAzLjY1MDgwNTQ1LDUuMzk3MDQwMTQgQzQuOTM5ODA0MDUsMy45MDY3NTY0NiA2LjM5NjMzNDE5LDMgOCwzIEM5LjYwMzY2NTgxLDMgMTEuMDYwMTk1OSwzLjkwNjc1NjQ2IDEyLjM0OTE5NDYsNS4zOTcwNDAxNCBDMTIuNzkwOTQzNSw1LjkwNzc3MDkyIDEzLjE4MTc3NTEsNi40NTMxMjIwNSAxMy41MTg4NDA5LDYuOTk4NzAzMDcgQzEzLjcyMjI0MTMsNy4zMjc5MzA3MSAxMy44NjM5NTE5LDcuNTg2OTAyODggMTMuOTQwMTkzNyw3Ljc0MTE2MTAxIEMxNC4wMTk5MzU0LDcuOTAyNTAwMTkgMTQuMDE5OTM1NCw4LjA5NzQ5OTgxIDEzLjk0MDE5MzcsOC4yNTg4Mzg5OSBDMTMuODYzOTUxOSw4LjQxMzA5NzEyIDEzLjcyMjI0MTMsOC42NzIwNjkyOSAxMy41MTg4NDA5LDkuMDAxMjk2OTMgQzEzLjE4MTc3NTEsOS41NDY4Nzc5NSAxMi43OTA5NDM1LDEwLjA5MjIyOTEgMTIuMzQ5MTk0NiwxMC42MDI5NTk5IEMxMS4wNjAxOTU5LDEyLjA5MzI0MzUgOS42MDM2NjU4MSwxMyA4LDEzIEM2LjM5NjMzNDE5LDEzIDQuOTM5ODA0MDUsMTIuMDkzMjQzNSAzLjY1MDgwNTQ1LDEwLjYwMjk1OTkgQzMuMjA5MDU2NDgsMTAuMDkyMjI5MSAyLjgxODIyNDg4LDkuNTQ2ODc3OTUgMi40ODExNTkwNiw5LjAwMTI5NjkzIEMyLjI3Nzc1ODY3LDguNjcyMDY5MjkgMi4xMzYwNDgxMSw4LjQxMzA5NzEyIDIuMDU5ODA2MjUsOC4yNTg4Mzg5OSBDMS45ODAwNjQ1OCw4LjA5NzQ5OTgxIDEuOTgwMDY0NTgsNy45MDI1MDAxOSAyLjA1OTgwNjI1LDcuNzQxMTYxMDEgWiBNOC4wNjQyMTk2MiwxMC4yODcyNzY2IEM2LjcyNzYwMzYyLDEwLjI4NzI3NjYgNS42NDQwNjIyNiw5LjI2MzIyNzk2IDUuNjQ0MDYyMjYsOCBDNS42NDQwNjIyNiw2LjczNjc3MjA0IDYuNzI3NjAzNjIsNS43MTI3MjM0NCA4LjA2NDIxOTYyLDUuNzEyNzIzNDQgQzkuNDAwODM1NjMsNS43MTI3MjM0NCAxMC40ODQzNzcsNi43MzY3NzIwNCAxMC40ODQzNzcsOCBDMTAuNDg0Mzc3LDkuMjYzMjI3OTYgOS40MDA4MzU2MywxMC4yODcyNzY2IDguMDY0MjE5NjIsMTAuMjg3Mjc2NiBaIE04LjA2NDIxOTYyLDkuMzI0MjEyNzUgQzguODM4MDQ5OTQsOS4zMjQyMTI3NSA5LjQ2NTM2MzM2LDguNzMxMzQyNTEgOS40NjUzNjMzNiw4IEM5LjQ2NTM2MzM2LDcuMjY4NjU3NDkgOC44MzgwNDk5NCw2LjY3NTc4NzI1IDguMDY0MjE5NjIsNi42NzU3ODcyNSBDNy4yOTAzODkzMSw2LjY3NTc4NzI1IDYuNjYzMDc1ODksNy4yNjg2NTc0OSA2LjY2MzA3NTg5LDggQzYuNjYzMDc1ODksOC43MzEzNDI1MSA3LjI5MDM4OTMxLDkuMzI0MjEyNzUgOC4wNjQyMTk2Miw5LjMyNDIxMjc1IFoiLz48L3N2Zz4=');
+     --icon-Feedback: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PHBhdGggZmlsbD0iIzAwMCIgZmlsbC1ydWxlPSJub256ZXJvIiBkPSJNNy4yMTgyMTMzLDkgQzcuMjI1MTUxOTcsOC45OTk4NTUxNSA3LjIzMjA4MzIxLDguOTk5ODU1NjQgNy4yMzkwMDI2LDkgTDguNTI0LDkgTDguNzEwNDY2NjcsOS4wMzYwNzA5MyBMMTMsMTAuNzYwMTU5OSBMMTMsMy4yMzk4NDAxMSBMOC43MTA0NjY2Nyw0Ljk2MzkyOTA3IEw4LjUyNCw1IEw1LDUgQzMuODk1NDMwNSw1IDMsNS44OTU0MzA1IDMsNyBDMyw3LjUzMDQzMjk4IDMuMjEwNzEzNjgsOC4wMzkxNDA4MSAzLjU4NTc4NjQ0LDguNDE0MjEzNTYgQzMuOTYwODU5MTksOC43ODkyODYzMiA0LjQ2OTU2NzAyLDkgNSw5IEw3LjIxODIxMzA2LDkgWiBNOC4wNDA1MDM3OSwxMCBMOC44NDUwNTE1MywxMS41OTgxMjAzIEM5LjA0NDU1OTMzLDExLjk4Nzc2MTMgOS4wODEwNTY1NCwxMi40NDA3MTI1IDguOTQ2NTA5NCwxMi44NTcyNzA1IEM4LjgxMTk2MjI3LDEzLjI3MzgyODQgOC41MTczOTk1LDEzLjYxOTg0ODEgOC4xMjc0OTI4OSwxMy44MTkyNDk0IEM3LjMxNjIzMTAzLDE0LjIzMzc1MDQgNi4zMjI1NDQ2MiwxMy45MTI3OTIyIDUuOTA3NzcxOTgsMTMuMTAzNDgwOSBMNC4yNTYxNzkwNSw5LjkwNjMzNDc3IEMzLjczOTI3OTU5LDkuNzc0MDI4ODYgMy4yNjIzNjUzMSw5LjUwNTAwNiAyLjg3ODY3OTY2LDkuMTIxMzIwMzQgQzIuMzE2MDcwNTIsOC41NTg3MTEyMSAyLDcuNzk1NjQ5NDcgMiw3IEMyLDUuMzQzMTQ1NzUgMy4zNDMxNDU3NSw0IDUsNCBMOC40MjcyNzc4MSw0IEwxMy4zMTM1MzMzLDIuMDM2MDcwOTMgQzEzLjY0MjA3NjIsMS45MDQwMTk5NCAxNCwyLjE0NTkxMjYyIDE0LDIuNSBMMTQsMTEuNSBDMTQsMTEuODU0MDg3NCAxMy42NDIwNzYyLDEyLjA5NTk4MDEgMTMuMzEzNTMzMywxMS45NjM5MjkxIEw4LjQyNzI3NzgxLDEwIEw4LjA0MDUwMzc5LDEwIFogTTUuNDMwMTEyNCwxMCBMNi43OTY5NjU4NCwxMi42NDU5NTMxIEM2Ljk2MDgwNDMxLDEyLjk2NTYzNTIgNy4zNTI2MjEzMSwxMy4wOTIxOTExIDcuNjcyMzM5NzgsMTIuOTI4ODM2MiBDNy44MjU4NzM0MywxMi44NTAzMTc5IDcuOTQxOTEzMzEsMTIuNzE0MDA3MSA3Ljk5NDkxNjczLDEyLjU0OTkwODUgQzguMDQ3OTIwMTUsMTIuMzg1ODA5OSA4LjAzMzU0MjQ2LDEyLjIwNzM3NDYgNy45NTM0MDI1LDEyLjA1MDgzNDggTDYuOTIwOTMxNTEsMTAgTDUuNDMwMTEyNCwxMCBaIi8+PC9zdmc+');
 diff --git a/test/common/ValueGuesser.ts b/test/common/ValueGuesser.ts
 index 6eabcd8cc..76b024ec1 100644
 --- a/test/common/ValueGuesser.ts

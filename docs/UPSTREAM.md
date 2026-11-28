@@ -233,6 +233,32 @@ Double-click روی خود رویداد (Record Card).
 قبلی را می‌بینند (همان رفتار timezone در upstream). و import/paste هنوز از همان محدودیت
 مستند (`parseDateStrict` پرچم per-column جلالی را نمی‌گیرد) تبعیت می‌کنند.
 
+## ۱۲. دکمهٔ «کارت رکورد» کنار هر ردیف (GridView)
+
+کنار هر ردیف در گرید یک دکمهٔ کوچک با آیکون `ExpandArrows` (Font Awesome Free 7.3.1، «expand»,
+CC BY 4.0 — attribution در خودِ فایل SVG) قرار گرفت؛ کلیک روی آن همان Record Card سند را برای
+**همان رکورد** باز می‌کند (همان مسیر `viewAsCard`: `{ colRef, rowId, sectionId, recordCard: true }`).
+
+- `app/client/components/BaseView.ts`: `viewRecordAsCard(rowId)` اضافه شد؛ `viewSelectedRecordAsCard()`
+  حالا از آن استفاده می‌کند (رفتار قبلی بدون تغییر).
+- `app/client/components/GridView.ts`: دکمه در `.gridview_data_row_num` ساخته می‌شود؛
+  ردیف «جدید» (`_isAddRow`) دکمه نمی‌گیرد و دکمه در `dom.maybe` با سه شرط واکنشی پنهان می‌شود:
+  `rowNumbers !== "hidden"`، `!isTableRecordCardDisabled` و `!isVirtual` (همان منطقی که اقدام
+  «نمایش به‌صورت کارت» در منوی ردیف با `ariaDisabled` دارد). `mousedown`/`click` را
+  stopPropagation می‌کند تا drag-select ردیف و context menu gutter فعال نشوند. ردیف‌شمارنده
+  (`ROW_NUMBER_WIDTH`) از ۵۲ به ۷۲ پیکسل رفت تا دکمه و شمارهٔ ردیف و علامت انتخاب هم‌پوشانی نداشته
+  باشند (همهٔ offsetهای sticky/frozen از `--row-num-width` می‌آیند، پس به‌صورت خودکار هماهنگ شدند).
+- موقعیت: `left: 2px` (لبهٔ جریانٔ آغاز؛ در RTL با Rtl.css به `right: 2px` مهاجرت می‌کند)، عمودی وسط،
+  ۱۸×۱۸ پیکسل. شمارهٔ ردیف در وسط می‌ماند، منوی ردیف (`menu_toggle`) در گوشهٔ روبروی دکمه است،
+  و `z-index` دکمه (۲۱) از gutter (۲۰) بالاتر است. انتخاب ردیف کل gutter را رنگی می‌کند
+  (`.gridview_data_row_num.selected`)، پس با دکمه تداخل بصری ندارد.
+- ترجمه: کلید `"View record as card"` به `en.client.json` و `fa.client.json` (گروه `GridView`)
+  اضافه شد. در چاپ پنهان است (`@media print { .record_card_toggle { display: none } }`).
+- آیکون جدید: `static/ui-icons/UI/ExpandArrows.svg`؛ `yarn generate:icons` خروجی `icons.css` و
+  `IconList.ts` را بازساخت (Diff بسیار کوچک). آیکون "Expand" موجود (فلش رو به پایین) دست‌نخورده ماند.
+- **وضعیت:** tsc/webpack/bundle.css سبز؛ test:common سبز (۸۷۶)؛ راستی‌آزمایی مرورگری دستی نشده —
+  جایگیری دکمه و clip شدن گوشه‌ها باید روی :8484 دیده شود.
+
 ## قبل از هر انتشار، این فهرست را ببینید
 
 ```bash

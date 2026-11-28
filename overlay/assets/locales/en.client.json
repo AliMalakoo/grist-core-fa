@@ -228,7 +228,7 @@
         "When the event ends. If empty, the event lasts as long as its start.": "When the event ends. If empty, the event lasts as long as its start.",
         "When the event starts.": "When the event starts.",
         "Whether the event lasts all day.": "Whether the event lasts all day."
-    },"JalaliCalendar":{"+{{count}} more_one":"+{{count}} more","+{{count}} more_other":"+{{count}} more","No events":"No events"},
+    },
     "CellContextMenu": {
         "Clear cell": "Clear cell",
         "Clear values": "Clear values",
@@ -1658,6 +1658,7 @@
     },
     "GridView": {
         "Click to insert": "Click to insert",
+    "View record as card": "View record as card",
         "ID": "ID",
         "row {{rowNum}} {{colName}}": "row {{rowNum}} {{colName}}",
         "row {{rowNum}} {{colName}} (new row)": "row {{rowNum}} {{colName}} (new row)"

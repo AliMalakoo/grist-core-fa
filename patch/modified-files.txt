@@ -1,9 +1,11 @@
+app/client/components/BaseView.ts
 app/client/components/CalendarSource.ts
 app/client/components/CalendarView.ts
 app/client/components/CalendarWrapper.ts
 app/client/components/Cursor.ts
 app/client/components/DetailView.ts
 app/client/components/Forms/FormView.ts
+app/client/components/GridView.css
 app/client/components/GridView.ts
 app/client/lib/TokenField.ts
 app/client/lib/autocomplete.ts
@@ -25,6 +27,7 @@ app/client/ui/WidgetTitle.ts
 app/client/ui/searchDropdown.ts
 app/client/ui/tooltips.ts
 app/client/ui2018/ColorSelect.ts
+app/client/ui2018/IconList.ts
 app/client/ui2018/ariaTabs.ts
 app/client/ui2018/menus.ts
 app/client/ui2018/modals.ts
@@ -41,8 +44,10 @@ app/common/ValueGuesser.ts
 app/common/WidgetOptions.ts
 app/common/parseDate.ts
 app/server/lib/sendAppPage.ts
+assets/locales/en.client.json
 assets/locales/fa.client.json
 assets/locales/fa.server.json
 sandbox/grist/functions/date.py
+static/icons/icons.css
 test/common/ValueGuesser.ts
 test/server/lib/sendAppPage.ts

@@ -42,6 +42,7 @@ import {
   freezeAction,
   IMultiColumnContextMenu,
 } from "app/client/ui/GridViewMenus";
+import { icon } from "app/client/ui2018/icons";
 import { menuToggle } from "app/client/ui/MenuToggle";
 import { mouseDragMatchElem } from "app/client/ui/mouseDrag";
 import { IRowContextMenu, RowContextMenu } from "app/client/ui/RowContextMenu";
@@ -113,7 +114,7 @@ type FreeSpaceRenderer = (owner: IDisposableOwner, view: GridView) => DomContent
 // size of the plus width
 const PLUS_WIDTH = 40;
 // size of the row number field
-const ROW_NUMBER_WIDTH = 52;
+const ROW_NUMBER_WIDTH = 72;
 
 interface InsertColOptions {
   colInfo?: ColInfo;
@@ -1738,6 +1739,26 @@ export default class GridView extends BaseView {
 
         // rowid dom
         dom("div.gridview_data_row_num",
+          // Open this record as a card; sits on the flow-start edge of the gutter, clear of
+          // the row number and of the selection check shown on hover. Hidden when row
+          // numbers are hidden (the gutter is 0px wide and clips its contents).
+          row._isAddRow() ? null :
+            dom.maybe((use) =>
+              use(this.viewSection.optionsObj).rowNumbers !== "hidden" &&
+              !use(this.viewSection.isTableRecordCardDisabled) &&
+              !use(this.viewSection.isVirtual), () =>
+              dom("button.record_card_toggle",
+                icon("ExpandArrows"),
+                dom.attr("title", t("View record as card")),
+                dom.attr("aria-label", t("View record as card")),
+                testId("record-card-toggle"),
+                dom.on("mousedown", (ev) => { ev.stopPropagation(); ev.preventDefault(); }),
+                dom.on("click", (ev) => {
+                  ev.stopPropagation();
+                  ev.preventDefault();
+                  this.viewRecordAsCard(row.getRowId());
+                }),
+              )),
           dom("div.gridview_data_row_info",
             dom.cls("linked_dst", (use) => {
               const myRowId = use(row.id);

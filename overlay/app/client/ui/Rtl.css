@@ -205,6 +205,13 @@ html[dir="rtl"] .gridview_data_row_num .menu_toggle {
   left: 0px;
   right: auto;
 }
+
+/* The per-row record-card button pins to the flow-start edge of the gutter (right in RTL),
+   mirroring the physical left: 2px in GridView.css. */
+html[dir="rtl"] .record_card_toggle {
+  left: auto;
+  right: 2px;
+}
 html[dir="rtl"] .gridview_data_corner_overlay .menu_toggle {
   left: auto;
   right: max(4px, calc(var(--row-num-width) - 18px));
